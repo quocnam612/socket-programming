@@ -1,0 +1,63 @@
+\section{Proof of Concept (PoC)}
+\subsection{Mô tả}
+Mục tiêu của PoC là xác minh rằng:
+\begin{itemize}
+    \item Ứng dụng C++ có thể gửi yêu cầu sinh văn bản tới mô hình LLM đã được cài đặt trong Ollama.
+    \item Kết quả trả về có thể được đọc, xử lý và sử dụng tiếp trong chương trình.
+    \item Cả hai phương thức giao tiếp (CLI và REST API) đều hoạt động ổn định, có thể mở rộng cho các ứng  lớn hơn.
+\end{itemize}
+Trước khi chạy chương trình phải kiểm tra xem ollama có đang chạy bằng lệnh:
+\begin{lstlisting}[language=bash]
+ollama serve\end{lstlisting}
+Kiểm tra các mô hình đã tải bằng lệnh:
+\begin{lstlisting}[language=bash]
+ollama list\end{lstlisting}
+
+\subsection{Gọi Ollama CLI}
+Phương pháp này dùng command-line của Ollama:
+\begin{lstlisting}[language=bash]
+ollama run llama3.1 "Hello"\end{lstlisting}
+Trong C++, có thể dùng lệnh std::system trong <cstdlib>
+\begin{lstlisting}[language=c++]
+void cli::autoAsk(const string& model) {
+    string prompt;
+    do {
+        cout << RED_COLOR << "You: " << BLUE_COLOR;
+        getline(cin, prompt);
+
+        if (prompt == "exit") break;
+        cout << GREEN_COLOR << "Ollama: \n" << BLUE_COLOR << flush;
+        string cmd = "ollama run " + model + " \"" + cli::escapeQuotes(prompt) + "\"";
+        system(cmd.c_str());
+    }
+    while (true);
+}\end{lstlisting}
+\subsection{Gọi Ollama REST API}
+Phương pháp này giao tiếp bằng REST API:
+\begin{lstlisting}[language=c++]
+generate(const string& model, const string& prompt) {
+    httplib::Client cli("localhost", 11434);
+
+    json body = {
+        {"model", model},
+        {"prompt", prompt},
+        {"stream", false}
+    };
+
+    auto res = cli.Post("/api/generate", body.dump(), "application/json");
+
+    Response out;
+    if (!res) {
+        out.response = "[Error] HTTP request failed. Is Ollama running?";
+        return out;
+    }
+    if (res->status != 200) {
+        out.response = "[Error] HTTP " + to_string(res->status) + ": " + res->body;
+        return out;
+    }
+
+    json resp_json = json::parse(res->body);
+    out.response   = resp_json.value("response", "");
+    return out;
+}\end{lstlisting}
+

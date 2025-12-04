@@ -1,0 +1,63 @@
+\documentclass[12pt]{article}
+
+\usepackage{hcmus-report-template}
+
+% Disable indentation on new paragraphs
+\setlength{\parindent}{0pt}
+
+% Line spacing 1.5
+\renewcommand{\baselinestretch}{1.5}
+
+% Optional: graphic path
+% \graphicspath{PATH_TO_GRAPHIC_FOLDER}
+
+% To use Times font family, uncomment this row
+% \usepackage{mathptmx}
+
+% To use roman section / subsection, uncomment these rows
+% \renewcommand{\thesection}{\Roman{section}}
+% \renewcommand{\thesubsection}{\thesection.\Roman{subsection}}
+
+% Define course name, report name and report title.
+\newcommand{\coursename}{Phương pháp lập trình hướng đối tượng}
+\newcommand{\reportname}{Tìm hiểu Ollama và thử nghiệm tích hợp LLM bằng C++}
+\newcommand{\reporttitle}{Project proposal + Proof of concept}
+
+\newcommand{\studentname}{Nguyễn Quốc Nam - 24120098}
+\newcommand{\teachername}{ThS. Trần Duy Quang}
+
+% Header
+\lhead{\reporttitle}
+\rhead{
+Trường Đại học Khoa học Tự nhiên - ĐHQG HCM\\
+\coursename
+}
+
+% Footer
+% \newcommand{\leftfooter}{\LaTeX\ by \href{https://github.com/trhgquan}{Quan, Tran Hoang}}
+\lfoot{\leftfooter}
+
+% ============ DOCUMENT ============
+\begin{document}
+
+\pagenumbering{roman}
+\input{content/title.tex}
+
+\tableofcontents
+\pagebreak
+\listoffigures
+\pagebreak
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\input{content/I-GioiThieu}
+\input{content/II-CoSoLyThuyet}
+\input{content/III-PhuongPhapThucHien}
+\input{content/IV-ProofOfConcept}
+\input{content/V-KetLuan}
+
+% References
+\input{ref/ref.tex}
+
+\end{document}

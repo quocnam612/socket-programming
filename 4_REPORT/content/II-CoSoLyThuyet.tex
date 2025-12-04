@@ -1,0 +1,12 @@
+\section{Cơ sở lý thuyết}
+\subsection{Ollama là gì}
+Ollama là viết tắt của (Omni-Layer Learning Language Acquisition Model: Mô hình Thu nhận Ngôn ngữ Học tập Đa lớp), một phương pháp tiếp cận mới về machine learning. Ollama là một nền tảng đột phá, bình đẳng hóa việc tiếp cận các mô hình ngôn ngữ lớn (LLM) bằng cách cho phép người dùng chạy chúng cục  trên máy của họ. \cite{enso2021}
+\subsection{LLM là gì}
+Mô hình ngôn ngữ lớn (LLM) là một loại chương trình trí tuệ nhân tạo (AI) có khả năng nhận dạng và tạo văn bản, cùng nhiều tác vụ khác. LLM được đào tạo trên các lượng dữ liệu văn bản lớn. LLM được xây dựng dựa trên machine learning: cụ thể là một loại mạng neuron được gọi là mô hình biến đổi. \cite{enso2024}
+
+\subsection{Khả năng tích hợp vào C++}
+C++ không có thư viện chính thức để kết nối với Ollama, nhưng có thể tích hợp theo hai hướng:
+\begin{itemize}
+    \item Gọi lệnh bằng CLI (ollama run).
+    \item Gửi HTTP request đến REST API của Ollama.
+\end{itemize}

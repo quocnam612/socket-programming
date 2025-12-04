@@ -1,0 +1,79 @@
+\section{Phương pháp thực hiện}
+\subsection{Cài đặt}
+\subsubsection{Ollama}
+Có thể cài đặt Ollama bằng:
+\begin{itemize}
+    \item \href{https://ollama.com/}{Website}} của Ollama
+    \item \href{https://github.com/ollama/ollama}{Github} của Ollama
+    \item Tải thủ công  câu lệnh:
+    \begin{lstlisting}[language=bash]
+    curl -fsSL https://ollama.com/download/ollama-linux-amd64.tgz \
+    | sudo tar zx -C /usr \end{lstlisting}
+\end{itemize}
+
+\subsubsection{Các thư viện khác}
+Bên cạnh Ollama,  trình tích hợp mô hình vào C++ cần thêm một số thư viện hỗ trợ:
+\begin{itemize}
+    \item \href{https://github.com/nlohmann/json}{nlohmann/json (json.hpp)}:
+    Thư viện header-only giúp phân tích và tạo dữ liệu JSON trong C++. JSON là định dạng trao đổi dữ liệu chính giữa C++ và Ollama thông qua API.
+    \begin{lstlisting}[language=bash]
+    curl -L https://raw.githubusercontent.com/nlohmann/json/develop/single_include/nlohmann/json.hpp -o path/to/json.hpp\end{lstlisting}
+    \item \href{https://github.com/yhirose/cpp-httplib}{yhirose/cpp-httplib (httplib.h)}:
+    Thư viện HTTP/HTTPS header-only đa nền tảng cho C++11.
+    \begin{lstlisting}[language=bash]
+    curl -L https://raw.githubusercontent.com/yhirose/cpp-httplib/master/httplib.h -o path/to/httplib.h\end{lstlisting}
+\end{itemize}
+
+\subsubsection{Các mô hình  trong Ollama}
+Các mô hình ngôn ngữ lớn (LLM) trong Ollama được đóng gói dưới dạng tệp GGUF và tối ưu hóa cho việc chạy trực tiếp trên máy cục bộ. Mỗi mô hình được phân phối với nhiều biến thể dung lượng khác nhau có thể được tìm thấy tại \href{ollama.com/library}{Ollama Library} \\
+Người dùng cần lưu ý cấu hình máy:
+\begin{itemize}
+    \item 8Gb RAM: có thể chạy được mô  với 7 tỉ tham số.
+    \item 16Gb RAM: có thể chạy được mô hình với 13 tỉ tham số.
+    \item 32Gb RAM: có thể chạy được mô hình với 33 tỉ tham số.
+\end{itemize}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{img/models.png}
+    \caption{Một số model với số tham số, kích thước, cmd để tải}
+    \label{fig:placeholder}
+\end{figure}
+
+\subsection{Tìm hiểu API và cách gọi mô hình \cite{lanina}}
+Ollama cung cấp REST API hoạt động qua port mặc định 11434, giúp các ngôn ngữ lập trình (C++, Python, Go…) gọi mô hình dễ dàng thông qua HTTP request. 
+
+\subsubsection{Kiến trúc API}
+\begin{itemize}
+    \item Server chạy local, không yêu cầu internet.
+    \item Mặc định giao tiếp qua http://localhost:11434/api/...
+    \item Dữ liệu trao đổi dạng JSON.
+\end{itemize}
+
+\subsubsection{Endpoint quan trọng}
+\begin{itemize}
+    \item /api/generate – sinh văn bản từ prompt
+    Yêu cầu tối thiểu:
+    \begin{lstlisting}[language=json]
+{
+  "model": "llama3.1",
+  "prompt": "Hello Ollama!"
+}\end{lstlisting}
+    Phản hồi (rút gọn)
+    \begin{lstlisting}[language=json]
+{
+  "response": "Hello! How can I help?",
+  "done": true
+}\end{lstlisting}
+    Tham số quan trọng:
+    \begin{itemize}
+        \item model: tên mô hình đã pull.
+        \item prompt: nội dung đầu vào.
+        \item stream: true hoặc false (stream token theo thời gian thực).
+    \end{itemize}
+    \item /api/chat – kiểu chatbot (dạng tin nhắn)
+    
+    \item /api/tags – xem danh sách model cài trên máy
+
+    \item /api/pull – tải mô hình mới
+    
+\end{itemize}
