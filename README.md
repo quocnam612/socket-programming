@@ -54,7 +54,7 @@ python 2_HD/Server.py 8089
 ```Bash
 python 2_HD/ClientLauncher.py 127.0.0.1 8089 8090 video/movie720.Mjpeg
 ```
-    hoặc
+hoặc
 ```Bash
 python 2_HD/ClientLauncher.py 127.0.0.1 8089 8090 video/movie1080.Mjpeg
 ```
