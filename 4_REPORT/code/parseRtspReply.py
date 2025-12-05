@@ -7,7 +7,7 @@ def parseRtspReply(self, data):
         if self.sessionId == 0:
             self.sessionId = session
         if self.sessionId == session:
-            if int(lines[0].split(' ')[1]) == 200: # 200 (from the example)
+            if int(lines[0].split(' ')[1]) == 200:
                 if self.requestSent == self.SETUP:
                     self.state = self.READY
                     self.openRtpPort() 

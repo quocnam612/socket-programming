@@ -1,7 +1,11 @@
 \section{Quy trình thực hiện}
 
 \subsection{Xây dựng RTP/RTSP server và client (4đ)}
-Các file trong phần này nằm trong thư mục \textbf{1\_RTSP\_RTP}
+Các file trong phần này nằm trong thư mục \textbf{1\_RTSP\_RTP} \\
+Đây là phiên bản đầu tiên cơ bản nhất của bài lab, yêu cầu xây dựng hệ thống streaming video sử dụng giao thức RTSP để điều khiển và RTP để truyền tải dữ liệu video từ server đến client. 
+
+\subsubsection{Ý tưởng}
+Hoàn thiện giao thức RTSP trên client và đóng gói dữ liệu RTP trên server để truyền tải video từ server đến client trên các hàm đã được tạo sẵn.
 
 \subsubsection{Hoàn thiện Client.py - Giao thức RTSP của client}
 Mô hình trang thái của client:
@@ -14,25 +18,74 @@ Mô hình trang thái của client:
 Hoàn thiện hàm gửi RTSP request - sendRtspRequest(): 
 \lstinputlisting[language=Python]{code/sendRtspRequest.py}
 \begin{itemize}
-    \item Hàm build chuỗi request theo từng trạng thái INIT/READY/PLAYING. Mỗi lần gửi đều tăng \texttt{CSeq} để server đồng bộ và gắn \texttt{Session} với các request sau \texttt{SETUP}.
-    \item Với \texttt{SETUP} client khởi tạo luồng nhận phản hồi song song, còn \texttt{PLAY}, \texttt{PAUSE}, \texttt{TEARDOWN} chỉ đơn giản tạo request tương ứng.
+    \item Hàm build chuỗi request. Mỗi lần gửi đều tăng \texttt{CSeq} để server đồng bộ và gắn \texttt{Session} để nhận biết sau \texttt{SETUP}. Cụ thể hơn:
+    \begin{itemize}
+        \item \texttt{SETUP} request: Chương trình sẽ kiểm tra trạng thái hiện tại của client, nếu là \texttt{INIT} thì tạo request \texttt{SETUP} và bắt đầu chạy nền phương thức recvRtspReply (nhận các RTSP reply từ server). Một request \texttt{SETUP} sẽ có dạng:
+        \begin{lstlisting}[language=Python]
+SETUP <Video_File> RTSP/1.0
+CSeq: <CSeq>
+Transport: RTP/UDP; client_port= <RTP_Port>\end{lstlisting}
+        Ví dụ:
+        \begin{lstlisting}[language=Python]
+SETUP video/movie288.Mjpeg RTSP/1.0
+CSeq: 1
+Transport: RTP/UDP; client_port= 8090\end{lstlisting} 
+        \item \texttt{PLAY} request: Chương trình sẽ kiểm tra trạng thái hiện tại của client, nếu là \texttt{READY} thì tạo request \texttt{PLAY} có dạng:
+        \begin{lstlisting}[language=Python]
+PLAY <Video_File> RTSP/1.0
+CSeq: <CSeq>
+Session: <Session_ID>\end{lstlisting}
+        Ví dụ:
+        \begin{lstlisting}[language=Python]
+PLAY video/movie288.Mjpeg RTSP/1.0
+CSeq: 2
+Session: 619227\end{lstlisting} 
+        \item \texttt{PAUSE} request: Chương trình sẽ kiểm tra trạng thái hiện tại của client, nếu là \texttt{PLAYING} thì tạo request \texttt{PAUSE} có dạng:
+        \begin{lstlisting}[language=Python]
+PAUSE <Video_File> RTSP/1.0
+CSeq: <CSeq>
+Session: <Session_ID>\end{lstlisting}
+        Ví dụ:
+        \begin{lstlisting}[language=Python]
+PAUSE video/movie288.Mjpeg RTSP/1.0
+CSeq: 3
+Session: 619227\end{lstlisting} 
+        \item \texttt{TEARDOWN} request: Chương trình sẽ kiểm tra trạng thái hiện tại của client, nếu không là \texttt{INIT}\ (là \texttt{READY} hoặc \texttt{PLAYING}) thì tạo request \texttt{TEARDOWN} có dạng:
+        \begin{lstlisting}[language=Python]
+TEARDOWN <Video_File> RTSP/1.0
+CSeq: <CSeq>
+Session: <Session_ID>\end{lstlisting}
+        Ví dụ:
+        \begin{lstlisting}[language=Python]
+TEARDOWN video/movie288.Mjpeg RTSP/1.0
+CSeq: 4
+Session: 619227\end{lstlisting} 
+    \end{itemize}
     \item Sau khi dựng xong, request được encode và đẩy qua socket TCP tới server RTSP.
 \end{itemize}
-
 
 Hoàn thiện hàm phân tích RTSP reply - parseRtspReply(): 
 \lstinputlisting[language=Python]{code/parseRtspReply.py}
 \begin{itemize}
-    \item Phản hồi được tách theo từng dòng để lấy \texttt{CSeq} và \texttt{Session}. Client chỉ xử lý khi số thứ tự trùng với gói vừa gửi để tránh trạng thái cũ.
-    \item Khi mã trạng thái 200 OK, client cập nhật máy trạng thái: \texttt{READY} sau \texttt{SETUP}, \texttt{PLAYING} sau \texttt{PLAY}, quay về \texttt{READY} sau \texttt{PAUSE} và về \texttt{INIT} khi \texttt{TEARDOWN}.
-    \item Riêng \texttt{SETUP} sẽ mở cổng RTP để chờ dữ liệu video, \texttt{PAUSE} giải phóng event phát và \texttt{TEARDOWN} đánh dấu đã nhận ACK để đóng kết nối.
+    \item Phản hồi được tách theo từng dòng để lấy \texttt{CSeq} và \texttt{Session}. Client chỉ xử lý khi số thứ tự trùng với gói vừa gửi để tránh trạng thái cũ. Ví dụ một phản hồi có dạng:
+    \begin{lstlisting}[language=Python]
+RTSP/1.0 <HTTP_Status_Code> <Phrase>
+CSeq: <CSeq>
+Session: <Session_ID>\end{lstlisting}
+    \item Khi mã trạng thái HTTP là 200, client cập nhật trạng thái mới dựa trên request đã gửi:
+    \begin{itemize}
+        \item Sau \texttt{SETUP}, trạng thái chuyển từ \texttt{INIT} sang \texttt{READY}. Sau đó mở port RTP bằng hàm openRtpPort().
+        \item Sau \texttt{PLAY}, trạng thái chuyển từ \texttt{READY} sang \texttt{PLAYING} và bắt đầu chạy nền hàm nhận gói RTP.
+        \item Sau \texttt{PAUSE}, trạng thái chuyển từ \texttt{PLAYING} sang \texttt{READY} và dừng hàm nhận gói RTP.
+        \item Sau \texttt{TEARDOWN}, trạng thái chuyển về \texttt{INIT} và đóng socket RTP.
+    \end{itemize}
 \end{itemize}
 
 Hoàn thiện hàm kết nối tới port của RTP - openRtpPort(): 
 \lstinputlisting[language=Python]{code/openRtpPort.py}
 \begin{itemize}
-    \item Client khởi tạo socket UDP (\texttt{AF\_INET, SOCK\_DGRAM}) cùng timeout ngắn để việc nhận khung không bị block.
-    \item Hàm bind trực tiếp vào \texttt{rtpPort}; nếu cổng đã được sử dụng, người dùng được cảnh báo bằng hộp thoại Tkinter để đổi port.
+    \item Client khởi tạo socket UDP (\texttt{AF\_INET, SOCK\_DGRAM}) (AF\_INET: IPv4, SOCK\_DGRAM: UDP) cùng timeout ngắn để việc nhận khung không bị block.
+    \item Hàm bind trực tiếp vào \texttt{rtpPort}; nếu cổng đã được sử dụng, người dùng sẽ được cảnh báo không thể bind port đó.
 \end{itemize}
 
 \subsubsection{Hoàn thiện RtpPacket.py - Giao thức RTP của server}
