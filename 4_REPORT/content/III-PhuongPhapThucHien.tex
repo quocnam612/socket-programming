@@ -1,6 +1,39 @@
 \section{Quy trình thực hiện}
 
 \subsection{Xây dựng RTP/RTSP server và client}
+Các file trong phần này nằm trong thư mục \textbf{1\_RTSP\_RTP}
+
+\subsubsection{Hoàn thiện Client.py - Giao thức RTSP của client}
+Mô hình trang thái của client:
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{img/states.png}
+    \caption{Sơ đồ trạng thái và chuyển đổi của client RTSP}
+\end{figure}
+
+Hoàn thiện hàm gửi RTSP request - sendRtspRequest(): 
+\lstinputlisting[language=Python]{code/sendRtspRequest.py}
+\begin{itemize}
+    \item Hàm build chuỗi request theo từng trạng thái INIT/READY/PLAYING. Mỗi lần gửi đều tăng \texttt{CSeq} để server đồng bộ và gắn \texttt{Session} với các request sau \texttt{SETUP}.
+    \item Với \texttt{SETUP} client khởi tạo luồng nhận phản hồi song song, còn \texttt{PLAY}, \texttt{PAUSE}, \texttt{TEARDOWN} chỉ đơn giản tạo request tương ứng.
+    \item Sau khi dựng xong, request được encode và đẩy qua socket TCP tới server RTSP.
+\end{itemize}
+
+
+Hoàn thiện hàm phân tích RTSP reply - parseRtspReply(): 
+\lstinputlisting[language=Python]{code/parseRtspReply.py}
+\begin{itemize}
+    \item Phản hồi được tách theo từng dòng để lấy \texttt{CSeq} và \texttt{Session}. Client chỉ xử lý khi số thứ tự trùng với gói vừa gửi để tránh trạng thái cũ.
+    \item Khi mã trạng thái 200 OK, client cập nhật máy trạng thái: \texttt{READY} sau \texttt{SETUP}, \texttt{PLAYING} sau \texttt{PLAY}, quay về \texttt{READY} sau \texttt{PAUSE} và về \texttt{INIT} khi \texttt{TEARDOWN}.
+    \item Riêng \texttt{SETUP} sẽ mở cổng RTP để chờ dữ liệu video, \texttt{PAUSE} giải phóng event phát và \texttt{TEARDOWN} đánh dấu đã nhận ACK để đóng kết nối.
+\end{itemize}
+
+Hoàn thiện hàm kết nối tới port của RTP - openRtpPort(): 
+\lstinputlisting[language=Python]{code/openRtpPort.py}
+\begin{itemize}
+    \item Client khởi tạo socket UDP (\texttt{AF\_INET, SOCK\_DGRAM}) cùng timeout ngắn để việc nhận khung không bị block.
+    \item Hàm bind trực tiếp vào \texttt{rtpPort}; nếu cổng đã được sử dụng, người dùng được cảnh báo bằng hộp thoại Tkinter để đổi port.
+\end{itemize}
 
 \subsubsection{Hoàn thiện RtpPacket.py - Giao thức RTP của server}
 Hoàn thiện hàm encapsulation - encode(): 
@@ -31,21 +64,72 @@ Phần header trong python sẽ có dạng như sau, với mỗi dòng tương �
     \caption{Cấu trúc mảng header}
 \end{figure} 
 
-\subsubsection{Hoàn thiện Client.py - Giao thức RTSP của client}
-Hoàn thiện hàm gửi RTSP request - sendRtspRequest(): 
-\lstinputlisting[language=Python]{code/sendRtspRequest.py}
-
-
-Hoàn thiện hàm phân tích RTSP reply - parseRtspReply(): 
-\lstinputlisting[language=Python]{code/parseRtspReply.py}
-
-
-Hoàn thiện hàm kết nối tới port của RTP - openRtpPort(): 
-\lstinputlisting[language=Python]{code/openRtpPort.py}
-
+\subsubsection{Thử nghiệm}
+Thực hiện chạy server RTSP/RTP và client RTSP trên cùng máy tính với video mẫu qua câu lệnh:
+\begin{itemize}
+    \item Ternimal 1: chạy server RTSP/RTP (python Server.py \textbf{<PORT>}). Ví Dụ:
+    \begin{lstlisting}[language=bash] 
+python 1_RTSP_RTP/Server.py 8089 \end{lstlisting}
+    \item Ternimal 2: chạy client RTSP (python ClientLauncher.py \textbf{<SERVER\_IP>} \textbf{<RTSP\_PORT>} \textbf{<RTP\_PORT>} \textbf{<VIDEO\_FILE>}). Ví Dụ:
+    \begin{lstlisting}[language=bash] 
+python 1_RTSP_RTP/ClientLauncher.py 127.0.0.1 8089 8090 video/movie288.Mjpeg \end{lstlisting}
+\end{itemize}
+Output thu được khi chọn các nút (Setup -> Play -> Pause) trên giao diện client:
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{img/1-demoOuput.png}
+    \caption{Output RTSP client}
+\end{figure}
+Có thể thấy client đã gửi đúng các request RTSP và chạy được video qua giao thức RTP. \\
+\textbf{Nhược điểm:} Với video có kích thước lớn (HD trở lên) khi 1 frame vượt quá kích thước gói UDP sẽ bị tràng byte qua các gói khác, dẫn đến việc giải mã sai frame tiếp theo và báo lỗi.
 
 \subsection{Bổ sung HD video streaming}
+Các file trong phần này nằm trong thư mục \textbf{2\_HD\_Video\_Streaming}. \\
+
+\subsubsection{Ý tưởng}
+Khắc phục nhược điểm của phần 1 bằng cách chia nhỏ frame video thành các mảnh (fragment) có kích thước phù hợp với gói UDP dựa trên MTU - Maximum transmission unit (dưới 1500 bytes). Mỗi fragment sẽ được đóng gói trong một gói RTP riêng biệt với đầy đủ header và payload. Client sẽ nhận các gói RTP, tái tạo lại các fragment và ghép chúng lại thành frame hoàn chỉnh bằng cách nhận diện các SOI, EOI trong payload (Marker Bit không được sử dụng do đã bị giới hạn giá trị bằng 0). \\
+
+
+\subsubsection{Thử nghiệm}
+Thực hiện chạy server RTSP/RTP và client RTSP trên cùng máy tính với video mẫu qua câu lệnh:
+\begin{itemize}
+    \item Ternimal 1: chạy server RTSP/RTP (python Server.py \textbf{<PORT>}). Ví Dụ:
+    \begin{lstlisting}[language=bash] 
+python 1_RTSP_RTP/Server.py 8089 \end{lstlisting}
+    \item Ternimal 2: chạy client RTSP (python ClientLauncher.py \textbf{<SERVER\_IP>} \textbf{<RTSP\_PORT>} \textbf{<RTP\_PORT>} \textbf{<VIDEO\_FILE>}). Ví Dụ:
+    \begin{lstlisting}[language=bash] 
+python 1_RTSP_RTP/ClientLauncher.py 127.0.0.1 8089 8090 video/movie288.Mjpeg \end{lstlisting}
+\end{itemize}
+Output thu được khi chọn các nút (Setup -> Play -> Pause) trên giao diện client:
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{img/1-demoOuput.png}
+    \caption{Output RTSP client}
+\end{figure}
+Có thể thấy client đã gửi đúng các request RTSP và chạy được video qua giao thức RTP. \\
+\textbf{Nhược điểm:} Với video có kích thước lớn (HD trở lên) khi 1 frame vượt quá kích thước gói UDP sẽ bị tràng byte qua các gói khác, dẫn đến việc giải mã sai frame tiếp theo và báo lỗi.
 
 
 \subsection{Bổ sung client cache}
+Các file trong phần này nằm trong thư mục \textbf{3\_Client\_Cache}. \\
 
+\subsubsection{Ý tưởng}
+
+\subsubsection{Thử nghiệm}
+Thực hiện chạy server RTSP/RTP và client RTSP trên cùng máy tính với video mẫu qua câu lệnh:
+\begin{itemize}
+    \item Ternimal 1: chạy server RTSP/RTP (python Server.py \textbf{<PORT>}). Ví Dụ:
+    \begin{lstlisting}[language=bash] 
+python 1_RTSP_RTP/Server.py 8089 \end{lstlisting}
+    \item Ternimal 2: chạy client RTSP (python ClientLauncher.py \textbf{<SERVER\_IP>} \textbf{<RTSP\_PORT>} \textbf{<RTP\_PORT>} \textbf{<VIDEO\_FILE>}). Ví Dụ:
+    \begin{lstlisting}[language=bash] 
+python 1_RTSP_RTP/ClientLauncher.py 127.0.0.1 8089 8090 video/movie288.Mjpeg \end{lstlisting}
+\end{itemize}
+Output thu được khi chọn các nút (Setup -> Play -> Pause) trên giao diện client:
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{img/1-demoOuput.png}
+    \caption{Output RTSP client}
+\end{figure}
+Có thể thấy client đã gửi đúng các request RTSP và chạy được video qua giao thức RTP. \\
+\textbf{Nhược điểm:} Với video có kích thước lớn (HD trở lên) khi 1 frame vượt quá kích thước gói UDP sẽ bị tràng byte qua các gói khác, dẫn đến việc giải mã sai frame tiếp theo và báo lỗi.
