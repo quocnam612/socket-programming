@@ -12,7 +12,7 @@ class VideoStream:
         self.frameNum = 0
         self.buffer = bytearray()
         self.eof = False
-        self.totalFrames = 0
+        self.totalFrames = None
 
     def nextFrame(self):
         """Extract next JPEG frame by scanning for SOI/EOI markers."""
@@ -44,22 +44,45 @@ class VideoStream:
         return self.frameNum
 
     def getTotalFrames(self):
-        """Get total number of frames."""
-        if self.totalFrames is not None:
+
+        # 1. Kiểm tra lại self.totalFrames
+        if self.totalFrames is not None and self.totalFrames > 0:
+            # Nếu đã tính toán và kết quả lớn hơn 0, trả về ngay
             return self.totalFrames
 
         currentPos = self.file.tell()
-        self.file.seek(0, 0)
+        self.file.seek(0, 0)  # Quay về đầu file để đếm
+        self.buffer.clear()  # Xóa buffer hiện tại
+        self.eof = False  # Reset cờ EOF
         count = 0
+
         while True:
-            length_bytes = self.file.read(4)
-            if not length_bytes:
-                break
-            length = int(length_bytes.decode())
-            self.file.seek(length, 1)
+            start = self._find_marker(self.SOI)
+            if start == -1:
+                # Không tìm thấy SOI. Đọc thêm dữ liệu (nếu còn)
+                if not self._fillBuffer():
+                    break  # Hết file
+                continue
+
+            # Tìm EOI từ sau SOI
+            end = self._find_marker(self.EOI, start + len(self.SOI))
+            if end == -1:
+                # Không tìm thấy EOI. Đọc thêm dữ liệu (nếu còn)
+                if not self._fillBuffer():
+                    # Nếu hết file mà vẫn không tìm thấy EOI, bỏ qua phần rác
+                    break
+                continue
+
+            # Tìm thấy một khung hình
             count += 1
+
+            # Xóa khung hình đã đếm khỏi buffer (bao gồm EOI 2 bytes)
+            del self.buffer[:end + len(self.EOI)]
+
         self.totalFrames = count
-        self.file.seek(currentPos)
+        self.file.seek(currentPos)  # Quay về vị trí ban đầu
+        self.buffer.clear()  # Dọn dẹp buffer sau khi đếm
+        self.eof = False
         return self.totalFrames
 
 

@@ -1,0 +1,6 @@
+.vscode/
+
+cache*.png
+cache*.jpg
+cache*.jpeg
+--pycache__/
