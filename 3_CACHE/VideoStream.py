@@ -1,44 +1,80 @@
 class VideoStream:
-	def __init__(self, filename):
-		self.filename = filename
-		try:
-			self.file = open(filename, 'rb')
-		except:
-			raise IOError
-		self.frameNum = 0
-		self.totalFrames = None
-		
-	def nextFrame(self):
-		"""Get next frame."""
-		data = self.file.read(5) # Get the framelength from the first 5 bits
-		if data: 
-			framelength = int(data)
-							
-			# Read the current frame
-			data = self.file.read(framelength)
-			self.frameNum += 1
-		return data
-		
-	def frameNbr(self):
-		"""Get frame number."""
-		return self.frameNum
-	
-	def getTotalFrames(self):
-        #Đọc file 1 lần để biết tổng frame"""
-		if self.totalFrames is not None:
-			return self.totalFrames
+    SOI = b'\xff\xd8'  # JPEG start of image
+    EOI = b'\xff\xd9'  # JPEG end of image
+    CHUNK_SIZE = 4096
 
-		current_pos = self.file.tell()  # lưu vị trí hiện tại
-		self.file.seek(0)  # quay về đầu file
-		count = 0
-		while True:
-			length_bytes = self.file.read(5)
-			if not length_bytes:
-				break
-			length = int(length_bytes.decode())
-			self.file.seek(length, 1)  # nhảy qua frame
-			count += 1
-		self.totalFrames = count
-		self.file.seek(current_pos)  # quay lại vị trí cũ
-		return self.totalFrames
-	
+    def __init__(self, filename):  # Constructor
+        self.filename = filename
+        try:
+            self.file = open(filename, 'rb')  # read binary from file
+        except:
+            raise IOError  # throw Input/Output error
+        self.frameNum = 0
+        self.buffer = bytearray()
+        self.eof = False
+        self.totalFrames = 0
+
+    def nextFrame(self):
+        """Extract next JPEG frame by scanning for SOI/EOI markers."""
+        if self.eof and not self.buffer:
+            return b''
+
+        while True:
+            start = self._find_marker(self.SOI)
+            if start == -1:
+                if not self._fillBuffer():
+                    self.buffer.clear()
+                    return b''
+                continue
+
+            end = self._find_marker(self.EOI, start + 2)
+            if end == -1:
+                if not self._fillBuffer():
+                    self.buffer.clear()
+                    return b''
+                continue
+
+            frame = bytes(self.buffer[start:end + 2])
+            del self.buffer[:end + 2]
+            self.frameNum += 1
+            return frame
+
+    def frameNbr(self):
+        """Get frame number."""
+        return self.frameNum
+
+    def getTotalFrames(self):
+        """Get total number of frames."""
+        if self.totalFrames is not None:
+            return self.totalFrames
+
+        currentPos = self.file.tell()
+        self.file.seek(0, 0)
+        count = 0
+        while True:
+            length_bytes = self.file.read(4)
+            if not length_bytes:
+                break
+            length = int(length_bytes.decode())
+            self.file.seek(length, 1)
+            count += 1
+        self.totalFrames = count
+        self.file.seek(currentPos)
+        return self.totalFrames
+
+
+    def _find_marker(self, marker, start=0):
+        try:
+            return self.buffer.index(marker, start)
+        except ValueError:
+            return -1
+
+    def _fillBuffer(self):
+        chunk = self.file.read(self.CHUNK_SIZE)
+        if not chunk:
+            self.eof = True
+            return False
+        self.buffer.extend(chunk)
+        return True
+
+
