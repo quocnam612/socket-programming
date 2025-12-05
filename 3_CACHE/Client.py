@@ -58,8 +58,10 @@ class Client:
         self.markerlessPackets = 0
 
         self.frameCount = 0
+        self.totalFrames = 0
         self.frameBuffer = []
-        self.MAX_BUFFER_SIZE = 30 # kích thước tối đa cho buffer
+        self.MIN_BUFFER_SIZE = 10
+        self.MAX_BUFFER_SIZE = 50 # kích thước tối đa cho buffer
 
 
     def createWidgets(self):
@@ -206,6 +208,37 @@ class Client:
         self.canvas.itemconfigure(self.imageWindow, width=photo.width(), height=photo.height())
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
+        currentTime = time.time()
+        self.lastFrameTime = currentTime
+        self.frameCount += 1
+
+        self.drawProgressBar()
+
+    def drawProgressBar(self):
+        W, H = 400, 10
+
+        if not hasattr(self, 'progressCanvas'):
+            self.progressCanvas = Canvas(self.master, width=W, height=H,
+                                         bg="black", highlightthickness=0)
+            self.progressCanvas.grid(row=3, column=0, columnspan=4, pady=5)
+        self.progressCanvas.delete("all")
+
+        # --- BUFFER BAR (xám) ---
+
+        progress_ratio = min(self.frameNbr / self.totalFrames, 1.0) if self.totalFrames > 0 else 0
+        progress_w = int(progress_ratio * W)
+
+        buffer_w = int((len(self.frameBuffer) / self.MAX_BUFFER_SIZE) * W) + progress_w
+        buffer_w = min(max(buffer_w, 0), W)
+
+        if buffer_w > 0:
+            self.progressCanvas.create_rectangle(0, 0, buffer_w, H, fill="gray", outline="gray")
+
+        # --- PROGRESS BAR (đỏ) ---
+
+        if progress_w > 0:
+            self.progressCanvas.create_rectangle(0, 0, progress_w, H, fill="red", outline="red")
+
     def connectToServer(self):
         """Connect to the Server. Start a new RTSP/TCP session."""
         self.rtspSocket = socket.socket(socket.AF_INET,
@@ -325,7 +358,7 @@ class Client:
     # S: Session: 123456
     def parseRtspReply(self, data):
         """Parse the RTSP reply from the server."""
-        lines = data.split('\n')
+        lines = [ln.strip() for ln in data.strip().splitlines() if ln.strip()]
         seqNum = int(lines[1].split(' ')[1])  # 1 (from the example)
 
         # Process only if the server reply's sequence number is the same as the request's
@@ -367,6 +400,10 @@ class Client:
                         self.teardownAcked = 1
                         self.stopPlaybackThreads()
                         self.closeRtpSocket()
+        for line in lines:
+            if line.lower().startswith('total-frames'):
+                self.totalFrames = int(line.split()[1])
+                print("Total Frames: " + str(self.totalFrames))
 
     def openRtpPort(self):
         """Open RTP socket binded to a specified port."""
