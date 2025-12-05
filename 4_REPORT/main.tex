@@ -19,12 +19,12 @@
 % \renewcommand{\thesubsection}{\thesection.\Roman{subsection}}
 
 % Define course name, report name and report title.
-\newcommand{\coursename}{Phương pháp lập trình hướng đối tượng}
-\newcommand{\reportname}{Tìm hiểu Ollama và thử nghiệm tích hợp LLM bằng C++}
-\newcommand{\reporttitle}{Project proposal + Proof of concept}
+\newcommand{\coursename}{Mạng máy tính}
+\newcommand{\reportname}{Video Streaming with RTSP and RTP}
+\newcommand{\reporttitle}{Project Socket Programming}
 
-\newcommand{\studentname}{Nguyễn Quốc Nam - 24120098}
-\newcommand{\teachername}{ThS. Trần Duy Quang}
+\newcommand{\studentname}{Nguyễn Quốc Nam - 24120098 \\ Võ Hoàng Phúc - 24120123 \\ Chế Nguyễn Thùy Trang - 24120469}
+\newcommand{\teachername}{ThS. Huỳnh Thụy Bảo Trân}
 
 % Header
 \lhead{\reporttitle}
@@ -34,7 +34,8 @@ Trường Đại học Khoa học Tự nhiên - ĐHQG HCM\\
 }
 
 % Footer
-% \newcommand{\leftfooter}{\LaTeX\ by \href{https://github.com/trhgquan}{Quan, Tran Hoang}}
+% Customize the footer text if desired. Leaving it empty hides the footer.
+\newcommand{\leftfooter}{}
 \lfoot{\leftfooter}
 
 % ============ DOCUMENT ============
@@ -45,6 +46,8 @@ Trường Đại học Khoa học Tự nhiên - ĐHQG HCM\\
 
 \tableofcontents
 \pagebreak
+\listoftables
+\pagebreak
 \listoffigures
 \pagebreak
 
@@ -54,8 +57,7 @@ Trường Đại học Khoa học Tự nhiên - ĐHQG HCM\\
 \input{content/I-GioiThieu}
 \input{content/II-CoSoLyThuyet}
 \input{content/III-PhuongPhapThucHien}
-\input{content/IV-ProofOfConcept}
-\input{content/V-KetLuan}
+\input{content/IV-KetLuan}
 
 % References
 \input{ref/ref.tex}

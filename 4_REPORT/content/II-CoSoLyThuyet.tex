@@ -1,12 +1,69 @@
 \section{Cơ sở lý thuyết}
-\subsection{Ollama là gì}
-Ollama là viết tắt của (Omni-Layer Learning Language Acquisition Model: Mô hình Thu nhận Ngôn ngữ Học tập Đa lớp), một phương pháp tiếp cận mới về machine learning. Ollama là một nền tảng đột phá, bình đẳng hóa việc tiếp cận các mô hình ngôn ngữ lớn (LLM) bằng cách cho phép người dùng chạy chúng cục  trên máy của họ. \cite{enso2021}
-\subsection{LLM là gì}
-Mô hình ngôn ngữ lớn (LLM) là một loại chương trình trí tuệ nhân tạo (AI) có khả năng nhận dạng và tạo văn bản, cùng nhiều tác vụ khác. LLM được đào tạo trên các lượng dữ liệu văn bản lớn. LLM được xây dựng dựa trên machine learning: cụ thể là một loại mạng neuron được gọi là mô hình biến đổi. \cite{enso2024}
 
-\subsection{Khả năng tích hợp vào C++}
-C++ không có thư viện chính thức để kết nối với Ollama, nhưng có thể tích hợp theo hai hướng:
+\subsection{RTP - Real time transfer protocol}
+RTP (Real-time Transfer Protocol) là giao thức truyền tải được thiết kế để vận chuyển dữ liệu thời gian thực như video, audio hoặc hình ảnh qua mạng IP. RTP thường hoạt động trên nền tảng UDP để giảm độ trễ và cho phép truyền tải liên tục, mặc dù đặc tính này có thể dẫn đến mất gói (packet loss).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{img/RTP.png}
+    \caption{Cấu trúc giao thức RTP}
+    \label{fig:placeholder}
+\end{figure}
+Gói RTP bao gồm hai phần: 
 \begin{itemize}
-    \item Gọi lệnh bằng CLI (ollama run).
-    \item Gửi HTTP request đến REST API của Ollama.
+    \item Header: chứa các thông tin điều khiển quan trọng như:
+    \begin{itemize}
+        \item Version: phiên bản của giao thức RTP.
+        \item Padding: chỉ định xem có thêm byte đệm vào cuối gói hay không.
+        \item Extension: chỉ định xem có phần mở rộng header hay không.
+        \item Contributing Source Count: số lượng nguồn đồng thời tham gia vào stream.
+        \item Marker Bit: đánh dấu các sự kiện quan trọng trong luồng dữ liệu.
+        \item Payload Type: xác định loại dữ liệu được truyền.
+        \item Sequence Number: xác định thứ tự gói tin, hỗ trợ phát hiện mất gói.
+        \item Timestamp: đánh dấu thời gian của gói tin, hỗ trợ đồng bộ hóa.
+        \item Synchronization Source Identifier: định danh nguồn stream.
+        \item Contributing Source Identifiers: định danh các nguồn đóng góp vào stream.
+    \end{itemize}
+    \item Payload: chứa dữ liệu thực tế của video.
+\end{itemize}
+
+\textbf{Lưu ý:} Một số giá trị đã được quy định sẵn trong giới hạn bài lab
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|p{8cm}|c|c|}
+\hline
+\multicolumn{1}{|c|}{\textbf{Ký hiệu}} & \multicolumn{1}{c|}{\textbf{Field}} & \multicolumn{1}{c|}{\textbf{Số bit}} & \multicolumn{1}{c|}{\textbf{Giá trị}} \\ \hline
+V & Version & 2 & 2  \\ \hline
+P & Padding & 1 & 0  \\ \hline
+X & Extension & 1 & 0  \\ \hline
+CC & Contributing Source Count & 4 & 0  \\ \hline
+M & Marker Bit & 1 & 0  \\ \hline
+PT & Payload Type & 7 & 26  \\ \hline
+ & Sequence Number & 16 & frameNbr  \\ \hline
+ & Timestamp & 32 & time()  \\ \hline
+SSRC & Synchronization Source Identifier & 32 & Số tùy ý \\ \hline
+CSRC & Contributing Source Identifier & 0 & Không có  \\ \hline
+ &&96 (12 bytes)&  \\ \hline
+\end{tabular}
+\caption{Giá trị có sẵn của bài lab trong RTP header}
+\end{table}
+
+\subsection{RTSP - Real time streaming protocol}
+RTSP (Real-time Streaming Protocol) là giao thức điều khiển cho các phiên truyền tải media. Khác với RTP, RTSP không vận chuyển dữ liệu video mà cung cấp cơ chế "điều khiển từ xa" các hành động như PLAY, PAUSE hay TEARDOWN. RTSP hoạt động trên TCP để đảm bảo tính chính xác của thông điệp điều khiển. 
+Một phiên RTSP tiêu chuẩn gồm các trạng thái và lệnh sau:
+\begin{itemize}
+    \item \textbf{SETUP}: yêu cầu server tạo phiên làm việc RTSP và thiết lập port để truyền RTP.
+    \item \textbf{PLAY}: yêu cầu server bắt đầu gửi các packet RTP tới client.
+    \item \textbf{PAUSE}: tạm dừng việc gửi dữ liệu nhưng giữ phiên RTSP.
+    \item \textbf{TEARDOWN}: yêu cầu server kết thúc phiên RTSP và giải phóng tài nguyên.
+\end{itemize}
+Client và server giao tiếp bằng mô hình request–response, trong đó mỗi yêu cầu đều kèm theo CSeq (Command Sequence) để đánh số thứ tự và Session ID để xác định phiên làm việc.
+
+\subsection{Mjpeg - Motion JPEG}
+MJPEG (Motion JPEG) là định dạng video được tạo ra bằng cách nối liên tiếp nhiều ảnh JPEG độc lập theo thời gian để tạo thành chuỗi chuyển động. 
+Cấu trúc của một frame MJPEG bao gồm:
+\begin{itemize}
+    \item Mỗi frame được lưu dưới dạng ảnh JPEG đầy đủ.
+    \item Trước mỗi frame có một 5-byte header mô tả độ dài frame.
+    \item JPEG frame bắt đầu bằng \texttt{0xFF 0xD8} (SOI) và kết thúc bằng \texttt{0xFF 0xD9} (EOI).
 \end{itemize}

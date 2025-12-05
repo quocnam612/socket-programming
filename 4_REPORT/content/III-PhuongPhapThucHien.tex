@@ -1,79 +1,51 @@
-\section{Phương pháp thực hiện}
-\subsection{Cài đặt}
-\subsubsection{Ollama}
-Có thể cài đặt Ollama bằng:
+\section{Quy trình thực hiện}
+
+\subsection{Xây dựng RTP/RTSP server và client}
+
+\subsubsection{Hoàn thiện RtpPacket.py - Giao thức RTP của server}
+Hoàn thiện hàm encapsulation - encode(): 
+\lstinputlisting[language=Python]{code/encode.py}
+\textbf{header}: mảng byte có kích thước 12 bytes
 \begin{itemize}
-    \item \href{https://ollama.com/}{Website}} của Ollama
-    \item \href{https://github.com/ollama/ollama}{Github} của Ollama
-    \item Tải thủ công  câu lệnh:
-    \begin{lstlisting}[language=bash]
-    curl -fsSL https://ollama.com/download/ollama-linux-amd64.tgz \
-    | sudo tar zx -C /usr \end{lstlisting}
+    \item Byte thứ 1 (8 bits): chứa trường Version, Padding, Extension, Contributing Source Count và có dạng V-V-P-X-CC-CC-CC-CC
+    \begin{itemize}
+        \item version \& 0x03: lấy 2 bit cuối của version (03[16] = 0000 0011[2])
+        \item << 6: dịch trái 6 bit để đưa về vị trí 2 bit đầu tiên trong byte (eg. V = 2 => 1100 0000[2])
+        \item Tương tự với các trường padding, extension, lúc này còn 4 bit cuối cùng là CC
+        \item cc \& 0x0F: chỉ lấy 4 bit cuối của cc (0F[16] = 0000 1111[2])
+    \end{itemize}
+    \item Byte thứ 2 (8 bits): chứa trường Marker Bit, Payload Type và có dạng M-PT-PT-PT-PT-PT-PT-PT (các logic tương tự byte 1)
+    \item Byte thứ 3-4 (16 bits): chỉ chứa trường Sequence Number
+    \begin{itemize}
+        \item (seqnum >> 8) \& 0xFF: lấy 8 bit đầu của seqnum (0xFF[16] = 1111 1111[2])
+        \item seqnum \& 0xFF: lấy 8 bit cuối của seqnum
+    \end{itemize}
+    \item Byte thứ 5-8 (32 bits): chỉ chứa trường Timestamp, logic tương tự byte 3-4
+    \item Byte thứ 9-12 (32 bits): chỉ chứa trường Synchronization Source Identifier (SSRC), logic tương tự byte 3-4
 \end{itemize}
 
-\subsubsection{Các thư viện khác}
-Bên cạnh Ollama,  trình tích hợp mô hình vào C++ cần thêm một số thư viện hỗ trợ:
-\begin{itemize}
-    \item \href{https://github.com/nlohmann/json}{nlohmann/json (json.hpp)}:
-    Thư viện header-only giúp phân tích và tạo dữ liệu JSON trong C++. JSON là định dạng trao đổi dữ liệu chính giữa C++ và Ollama thông qua API.
-    \begin{lstlisting}[language=bash]
-    curl -L https://raw.githubusercontent.com/nlohmann/json/develop/single_include/nlohmann/json.hpp -o path/to/json.hpp\end{lstlisting}
-    \item \href{https://github.com/yhirose/cpp-httplib}{yhirose/cpp-httplib (httplib.h)}:
-    Thư viện HTTP/HTTPS header-only đa nền tảng cho C++11.
-    \begin{lstlisting}[language=bash]
-    curl -L https://raw.githubusercontent.com/yhirose/cpp-httplib/master/httplib.h -o path/to/httplib.h\end{lstlisting}
-\end{itemize}
-
-\subsubsection{Các mô hình  trong Ollama}
-Các mô hình ngôn ngữ lớn (LLM) trong Ollama được đóng gói dưới dạng tệp GGUF và tối ưu hóa cho việc chạy trực tiếp trên máy cục bộ. Mỗi mô hình được phân phối với nhiều biến thể dung lượng khác nhau có thể được tìm thấy tại \href{ollama.com/library}{Ollama Library} \\
-Người dùng cần lưu ý cấu hình máy:
-\begin{itemize}
-    \item 8Gb RAM: có thể chạy được mô  với 7 tỉ tham số.
-    \item 16Gb RAM: có thể chạy được mô hình với 13 tỉ tham số.
-    \item 32Gb RAM: có thể chạy được mô hình với 33 tỉ tham số.
-\end{itemize}
+Phần header trong python sẽ có dạng như sau, với mỗi dòng tương ứng với 4 bytes (32 bits):
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.5\linewidth]{img/models.png}
-    \caption{Một số model với số tham số, kích thước, cmd để tải}
-    \label{fig:placeholder}
-\end{figure}
+    \includegraphics[width=0.7\linewidth]{img/realRTP.png}
+    \caption{Cấu trúc mảng header}
+\end{figure} 
 
-\subsection{Tìm hiểu API và cách gọi mô hình \cite{lanina}}
-Ollama cung cấp REST API hoạt động qua port mặc định 11434, giúp các ngôn ngữ lập trình (C++, Python, Go…) gọi mô hình dễ dàng thông qua HTTP request. 
+\subsubsection{Hoàn thiện Client.py - Giao thức RTSP của client}
+Hoàn thiện hàm gửi RTSP request - sendRtspRequest(): 
+\lstinputlisting[language=Python]{code/sendRtspRequest.py}
 
-\subsubsection{Kiến trúc API}
-\begin{itemize}
-    \item Server chạy local, không yêu cầu internet.
-    \item Mặc định giao tiếp qua http://localhost:11434/api/...
-    \item Dữ liệu trao đổi dạng JSON.
-\end{itemize}
 
-\subsubsection{Endpoint quan trọng}
-\begin{itemize}
-    \item /api/generate – sinh văn bản từ prompt
-    Yêu cầu tối thiểu:
-    \begin{lstlisting}[language=json]
-{
-  "model": "llama3.1",
-  "prompt": "Hello Ollama!"
-}\end{lstlisting}
-    Phản hồi (rút gọn)
-    \begin{lstlisting}[language=json]
-{
-  "response": "Hello! How can I help?",
-  "done": true
-}\end{lstlisting}
-    Tham số quan trọng:
-    \begin{itemize}
-        \item model: tên mô hình đã pull.
-        \item prompt: nội dung đầu vào.
-        \item stream: true hoặc false (stream token theo thời gian thực).
-    \end{itemize}
-    \item /api/chat – kiểu chatbot (dạng tin nhắn)
-    
-    \item /api/tags – xem danh sách model cài trên máy
+Hoàn thiện hàm phân tích RTSP reply - parseRtspReply(): 
+\lstinputlisting[language=Python]{code/parseRtspReply.py}
 
-    \item /api/pull – tải mô hình mới
-    
-\end{itemize}
+
+Hoàn thiện hàm kết nối tới port của RTP - openRtpPort(): 
+\lstinputlisting[language=Python]{code/openRtpPort.py}
+
+
+\subsection{Bổ sung HD video streaming}
+
+
+\subsection{Bổ sung client cache}
+

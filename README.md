@@ -22,6 +22,7 @@ Các thư mục được chia dựa trên tiêu chí chấm điểm. Trong mỗi
 ![Description](4_REPORT/img/states.png)
 
 #### Lệnh chạy chương trình (tham khảo)
+
 - Ở tiêu chí này chương trình chỉ có thể chạy các video với độ phân giải thấp (không cần chia thành các segment cho từng frame)
 
 **Terminal 1 (không được tắt, kill terminal nếu muốn dừng)**
@@ -33,7 +34,7 @@ python 1_RTSP_RTP/Server.py 8089
 **Terminal 2 (sau khi đã chạy server ở terminal 1)**
 
 ```Bash
-python 1_RTSP_RTP/ClientLauncher.py 127.D0.0.1 8089 8090 video/movie288.Mjpeg
+python 1_RTSP_RTP/ClientLauncher.py 127.0.0.1 8089 8090 video/movie288.Mjpeg
 ```
 
 ### HD Video Streaming (folder 2_HD)
@@ -41,6 +42,7 @@ python 1_RTSP_RTP/ClientLauncher.py 127.D0.0.1 8089 8090 video/movie288.Mjpeg
 - Xây dựng logic chia các packet của từng frame thành các segment để gửi cho client và bỏ qua các frame gửi không kịp để đảm bảo thời lượng của video
 
 #### Lệnh chạy chương trình (tham khảo)
+
 - Ở tiêu chí này chương trình có thể chạy các video với độ phân giải cao hơn như HD (720p, 1080p), tuy nhiên sẽ gặp khó khăn gửi các segment cho từng frame với các video có độ phân giải cao (1440p) dẫn đến hiện tượng drop fps.
 
 **Terminal 1 (không được tắt, kill terminal nếu muốn dừng)**
@@ -54,15 +56,19 @@ python 2_HD/Server.py 8089
 ```Bash
 python 2_HD/ClientLauncher.py 127.0.0.1 8089 8090 video/movie720.Mjpeg
 ```
+
 hoặc
+
 ```Bash
 python 2_HD/ClientLauncher.py 127.0.0.1 8089 8090 video/movie1080.Mjpeg
 ```
+
 ### Client-Side Caching (folder 3_CACHE)
 
-- Xây dựng logic tự dộng gửi và lưu trước một số frame và liên tục gửi và lưu frame mới khi chạy
+- Xây dựng logic lưu trước một số frame và playback dựa trên các frame đã lưu
 
 #### Lệnh chạy chương trình (tham khảo)
+
 - Ở tiêu chí này chương trình có thể chạy hoặc xem lại các video với độ phân giải cao (1440p) mà không gặp tình trạng drop fps (mất frame).
 
 **Terminal 1 (không được tắt, kill terminal nếu muốn dừng)**

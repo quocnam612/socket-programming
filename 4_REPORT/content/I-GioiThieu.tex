@@ -1,14 +1,30 @@
 \section{Giới thiệu}
 
-\subsection{Lý do chọn đề tài}
+\subsection{Mục tiêu bài lab}
 
-Trong bối cảnh các mô hình ngôn ngữ lớn (large language models - LLM) đang trở nên phổ biến, nhu cầu chạy các mô hình đó trên máy cá nhân ngày càng tăng. Tuy nhiên, đa số LLM yêu cầu kiến thức triển khai phức tạp. Ollama là nền tảng giúp chạy LLM cục bộ đơn giản, trực quan, nhưng hiện chưa có SDK chính thức dành cho C++.
-Vì vậy, đề tài hướng đến việc tìm hiểu hoạt động của Ollama và xây dựng PoC (Proof of Concept) cho phép ứng dụng C++ tương tác với mô hình LLM.
+Hiểu được và xây dựng được hệ thống streaming video dùng giao thức RTSP để điều khiển và RTP để truyền tải dữ liệu video từ server đến client.
 
-\subsection{Mục tiêu}
+\subsection{Tiêu chí đánh giá}
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|p{8cm}|c|}
+\hline
+\multicolumn{1}{|c|}{\textbf{No.}} & \multicolumn{1}{c|}{\textbf{Yêu cầu}} & \multicolumn{1}{c|}{\textbf{Điểm}} \\ \hline
+1 & Triển khai giao thức RTSP của máy khách và đóng bóc gói tin RTP của máy chủ. & 4đ  \\ \hline
+2 & Truyền phát video HD & 3đ \\ \hline
+3 & Bộ nhớ đệm phía máy khách & 2.5đ \\ \hline
+3 & Báo cáo & 0.5đ \\ \hline
+\end{tabular}
+\caption{Tiêu chí chấm điểm bài lab}
+\label{tab:my_label}
+\end{table}
+
+\subsection{Tổng quan thư mục}
+Bài lab được tổ chức theo các thư mục sau:
 \begin{itemize}
-    \item Hiểu cách hoạt động của nền tảng Ollama.
-    \item Cài đặt, cấu hình mô hình LLM chạy trên máy.
-    \item Tích hợp Ollama vào chương trình C++ bằng các phương pháp cơ bản.
-    \item Xây dựng PoC chứng minh khả năng gọi mô hình LLM từ C++.
+    \item \textbf{1\_RTSP\_RTP}: Chứa source code cho tiêu chí 1.
+    \item \textbf{2\_HD}: Chứa source code cho tiêu chí 2.
+    \item \textbf{3\_CACHE}: Chứa source code cho tiêu chí 3.
+    \item \textbf{4\_REPORT}: Chứa báo cáo của bài lab (tiêu chí 4).
+    \item \textbf{video}: Chứa các video với các độ phân giải khác nhau phù hợp với từng tiêu chí.
 \end{itemize}

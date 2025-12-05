@@ -18,8 +18,8 @@ class RtpPacket:
 		# Fill the header bytearray with RTP header fields
 		# header[0] = ...
 		# ...
-		header[0] = (version << 6) | (padding << 4) | (extension << 3) | (cc & 0x0F) # V V P X CC CC CC CC
-		header[1] = (marker << 7) | (pt & 0x7F) # M PT PT PT PT PT PT PT
+		header[0] = (version & 0x03) << 6 | (padding & 0x01) << 5 | (extension & 0x01) << 4 | (cc & 0x0F)
+		header[1] = (marker & 0x01) << 7 | (pt & 0x7F)
 		header[2:4] = (seqnum >> 8) & 0xFF, seqnum & 0xFF
 		header[4:8] = (timestamp >> 24) & 0xFF, (timestamp >> 16) & 0xFF, (timestamp >> 8) & 0xFF, timestamp & 0xFF
 		header[8:12] = (ssrc >> 24) & 0xFF, (ssrc >> 16) & 0xFF, (ssrc >> 8) & 0xFF, ssrc & 0xFF

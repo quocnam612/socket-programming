@@ -42,6 +42,26 @@
 }
 \lstset{style=mystyle}
 
+\lstdefinelanguage{json}{
+    basicstyle=\ttfamily\footnotesize,
+    commentstyle=\color{codegreen},
+    stringstyle=\color{codepurple},
+    showstringspaces=false,
+    breaklines=true,
+    literate={0}{{0}}1 {1}{{1}}1 {2}{{2}}1 {3}{{3}}1 {4}{{4}}1 {5}{{5}}1 {6}{{6}}1 {7}{{7}}1 {8}{{8}}1 {9}{{9}}1
+         {:}{{{\color{codepurple}{:}}}}1
+         {,}{{{\color{codepurple}{,}}}}1
+         {\{}{{{\color{codepurple}{\{}}}}1
+         {\}}{{{\color{codepurple}{\}}}}}1
+         {[}{{{\color{codepurple}{[}}}}1
+         {]}{{{\color{codepurple}{]}}}}1,
+    morestring=[b]",
+    morecomment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    keywordstyle=\color{magenta},
+    keywords={true,false,null}
+}
+
 
 % ============ HEADER AND FOOTER ============
 % Header length
