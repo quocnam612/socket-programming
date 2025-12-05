@@ -116,7 +116,12 @@ class Client:
 				# Upon receiving ACK for TEARDOWN request,
 				# close the RTP socket
 				if self.teardownAcked == 1:
-					self.rtpSocket.shutdown(socket.SHUT_RDWR) # SHUT_RDWR: stop both sends(WR: write) and receives(RD: read) on the socket
+					try:
+						# UDP sockets are connectionless; shutdown may raise when not connected,
+						# so only close and swallow shutdown errors gracefully.
+						self.rtpSocket.shutdown(socket.SHUT_RDWR) # best effort
+					except OSError:
+						pass
 					self.rtpSocket.close() # Release the port (RTP and UDP port)
 					break
 					

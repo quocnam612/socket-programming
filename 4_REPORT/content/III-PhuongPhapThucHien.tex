@@ -134,14 +134,14 @@ Output thu được khi chọn các nút (Setup -> Play -> Pause) trên giao di�
     \caption{Output RTSP client}
 \end{figure}
 Có thể thấy client đã gửi đúng các request RTSP và chạy được video qua giao thức RTP. \\
-\textbf{Nhược điểm:} Với video có độ phân giải cao (HD trở lên) khi 1 frame vượt quá kích thước gói UDP sẽ bị tràng byte qua các gói khác, dẫn đến việc giải mã sai frame tiếp theo và báo lỗi.
+\textbf{Nhược điểm:} Với video có độ phân giải cao (HD trở lên) khi 1 frame vượt quá kích thước gói UDP sẽ bị tràng byte qua các gói khác, dẫn đến việc giải mã sai các frame tiếp theo và báo lỗi.
 
 \subsection{Bổ sung HD video streaming (3đ)}
 Các file trong phần này nằm trong thư mục \textbf{2\_HD\_Video\_Streaming}. \\
 Đây là phiên bản nâng cấp của phần 1 nhằm hỗ trợ streaming video có độ phân giải cao (HD - 720p, Full HD - 1080p, 2K - 1440p). \\
 
 \subsubsection{Ý tưởng}
-Khắc phục nhược điểm của phần 1 bằng cách chia nhỏ frame video thành các mảnh (fragment) có kích thước phù hợp với gói UDP dựa trên MTU - Maximum transmission unit (dưới 1500 bytes).
+Khắc phục nhược điểm của phần 1 bằng cách chia nhỏ frame video thành các mảnh (fragment) có kích thước phù hợp với gói UDP dựa trên MTU - Maximum transmission unit (Hầu hết các hệ thống mạng dùng MTU mặc định 1500 bytes cho IPv4 để đảm bảo tương thích.).
 
 \begin{table}[H]
 \centering
@@ -149,16 +149,18 @@ Khắc phục nhược điểm của phần 1 bằng cách chia nhỏ frame vide
 \begin{tabular}{|p{4cm}|p{5cm}|p{7cm}|}
 \hline
 \textbf{Các phương tiện truyền tải qua IP} & \textbf{MTU (bytes)} & \textbf{Notes} \\ \hline
-Internet IPv4 path MTU & Tối thiểu 68 bytes, tối đa 64 KiB & Nên dùng Path MTU Discovery để tìm MTU thực tế trên đường đi; nếu router phải giảm MTU sẽ xảy ra IP fragmentation. \\ \hline
-Internet IPv6 path MTU & Tối thiểu 1280 bytes, tối đa 64 KiB & Yêu cầu Path MTU Discovery trừ khi giữ nguyên mức tối thiểu 1280; jumbo gram với Jumbo Payload option cho phép payload từ 65\,536 đến ~4.3 tỉ octet. \\ \hline
+Internet IPv4 path MTU & Tối thiểu 68 bytes, tối đa 64 KiB & MTU thực tế phụ thuộc đường truyền; nếu router giảm MTU sẽ xảy ra IP fragmentation. \\ \hline
+Internet IPv6 path MTU & Tối thiểu 1280 bytes, tối đa 64 KiB & Yêu cầu MTU tối thiểu 1280 bytes; hỗ trợ gói jumbo cho payload lớn. \\ \hline
 X.25 & 576 bytes khi gửi hoặc 1600 bytes khi nhận & Chuẩn X.25 quy định hai ngưỡng MTU khác nhau cho chiều gửi và nhận. \\ \hline
-Ethernet v2 & 1500 bytes & Phần lớn triển khai IP over Ethernet đều dùng frame Ethernet II nên bị giới hạn bởi MTU 1500 bytes. \\ \hline
+Ethernet v2 & 1500 bytes & Hầu hết mạng LAN sử dụng Ethernet II nên MTU mặc định luôn là 1500 bytes. \\ \hline
 ... & ... & ... \\ \hline
 \end{tabular}
 \caption{Một số MTU cho các phương tiện truyền tải phổ biến}
 \end{table}
 
-Mỗi fragment sẽ được đóng gói trong một gói RTP riêng biệt với đầy đủ header và payload. Client sẽ nhận các gói RTP, tái tạo lại các fragment và ghép chúng lại thành frame hoàn chỉnh bằng cách nhận diện các SOI, EOI trong payload (Marker Bit không được sử dụng do đã bị giới hạn giá trị bằng 0). \\
+Mỗi fragment sẽ được đóng gói trong một gói RTP riêng biệt với đầy đủ header và payload. Client sẽ nhận các gói RTP, tái tạo lại các fragment và ghép chúng lại thành frame hoàn chỉnh bằng cách nhận diện các SOI, EOI trong payload (Marker Bit không được sử dụng do đã bị giới hạn giá trị bằng 0).
+
+\subsubsection{Thử nghiệm}
 
 \textbf{Nhược điểm:} Dù đã gửi và chạy được nhưng với các video có độ phải cao hơn (1440p, 2160p,...) các frame tải chậm hơn tốc độ của video dẫn tới tình trạng mất frame và drop FPS nặng.
 
@@ -171,17 +173,3 @@ Khắc phục nhược điểm của phần 2 bằng cách thêm bộ đệm (bu
 
 \subsubsection{Thử nghiệm}
 Thực hiện chạy server RTSP/RTP và client RTSP trên cùng máy tính với video mẫu qua câu lệnh:
-\begin{itemize}
-    \item Ternimal 1: chạy server RTSP/RTP (python Server.py \textbf{<PORT>}). Ví Dụ:
-    \begin{lstlisting}[language=bash] 
-python 1_RTSP_RTP/Server.py 8089 \end{lstlisting}
-    \item Ternimal 2: chạy client RTSP (python ClientLauncher.py \textbf{<SERVER\_IP>} \textbf{<RTSP\_PORT>} \textbf{<RTP\_PORT>} \textbf{<VIDEO\_FILE>}). Ví Dụ:
-    \begin{lstlisting}[language=bash] 
-python 1_RTSP_RTP/ClientLauncher.py 127.0.0.1 8089 8090 video/movie288.Mjpeg \end{lstlisting}
-\end{itemize}
-Output thu được khi chọn các nút (Setup -> Play -> Pause) trên giao diện client:
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.7\linewidth]{img/1-demoOuput.png}
-    \caption{Output RTSP client}
-\end{figure}
