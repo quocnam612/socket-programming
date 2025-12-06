@@ -172,8 +172,16 @@ Khắc phục nhược điểm của phần 2 bằng cách thêm bộ đệm (bu
 
 \subsubsection{Hoàn thiện cơ chế bộ đệm phía client}
 
+\subsubsection{Lợi ích của cơ chế Client-Side caching}
+\begin{itemize}
+    \item Video ổn định hơn trong khi mạng chưa kịp ổn định
+    \item Giảm giật hình do trễ UDP
+    \item Hỗ trợ phát lại và đọc nhanh frame từ file
+    \item Giảm tải cho server khi client không yêu cầu gửi lại các frame đã có
+\end{itemize}
 
-
+\subsubsection{Kết luận}
+Client-side caching làm cho hệ thống RTP/RTSP trở nên mượt mà và gần với mô hình của các nền tảng streaming chuyên nghiệp. Cơ chế queue + file cache giúp đảm bảo tính ổn định và liên tục khi mạng có độ trễ hoặc mất gói
 
 \subsubsection{Thử nghiệm}
 Thực hiện chạy server RTSP/RTP và client RTSP trên cùng máy tính với video mẫu qua câu lệnh:
