@@ -1,12 +1,12 @@
 \section{Cơ sở lý thuyết}
 
 \subsection{RTP - Real time transfer protocol}
-RTP (Real-time Transfer Protocol) là giao thức truyền tải được thiết kế để vận chuyển dữ liệu thời gian thực như video, audio hoặc hình ảnh qua mạng IP. RTP thường hoạt động trên nền tảng UDP để giảm độ trễ và cho phép truyền tải liên tục, mặc dù đặc tính này có thể dẫn đến mất gói (packet loss).
+RTP (Real-time Transfer Protocol) là giao thức truyền tải được thiết kế để vận chuyển dữ liệu thời gian thực như video, audio hoặc hình ảnh qua mạng IP. RTP thường hoạt động trên nền tảng UDP để giảm độ trễ và cho phép truyền tải liên tục, mặc dù đặc tính này có thể dẫn đến mất gói (packet loss). \cite{rtp1}
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.7\linewidth]{img/RTP.png}
-    \caption{Cấu trúc giao thức RTP}
+    \caption{Cấu trúc giao thức RTP \cite{rtp2}}
     \label{fig:placeholder}
 \end{figure}
 Gói RTP bao gồm hai phần: 
@@ -49,7 +49,7 @@ CSRC & Contributing Source Identifier & 0 & Không có  \\ \hline
 \end{table}
 
 \subsection{RTSP - Real time streaming protocol}
-RTSP (Real-time Streaming Protocol) là giao thức điều khiển cho các phiên truyền tải media. Khác với RTP, RTSP không vận chuyển dữ liệu video mà cung cấp cơ chế "điều khiển từ xa" các hành động như PLAY, PAUSE hay TEARDOWN. RTSP hoạt động trên TCP để đảm bảo tính chính xác của thông điệp điều khiển. 
+RTSP (Real-time Streaming Protocol) là giao thức điều khiển cho các phiên truyền tải media. Khác với RTP, RTSP không vận chuyển dữ liệu video mà cung cấp cơ chế "điều khiển từ xa" các hành động như PLAY, PAUSE hay TEARDOWN. RTSP hoạt động trên TCP để đảm bảo tính chính xác của thông điệp điều khiển. \cite{rtsp1} \\
 Một phiên RTSP tiêu chuẩn gồm các trạng thái và lệnh sau:
 \begin{itemize}
     \item \textbf{SETUP}: yêu cầu server tạo phiên làm việc RTSP và thiết lập port để truyền RTP.
@@ -60,7 +60,7 @@ Một phiên RTSP tiêu chuẩn gồm các trạng thái và lệnh sau:
 Client và server giao tiếp bằng mô hình request–response, trong đó mỗi yêu cầu đều kèm theo CSeq (Command Sequence) để đánh số thứ tự và Session ID để xác định phiên làm việc.
 
 \subsection{Mjpeg - Motion JPEG}
-MJPEG (Motion JPEG) là định dạng video được tạo ra bằng cách nối liên tiếp nhiều ảnh JPEG độc lập theo thời gian để tạo thành chuỗi chuyển động. 
+MJPEG (Motion JPEG) là định dạng video được tạo ra bằng cách nối liên tiếp nhiều ảnh JPEG độc lập theo thời gian để tạo thành chuỗi chuyển động. \cite{mjpeg1} \\
 Cấu trúc của một frame MJPEG bao gồm:
 \begin{itemize}
     \item Mỗi frame được lưu dưới dạng ảnh JPEG đầy đủ.

@@ -1,3 +1,19 @@
-\begin{thebibliography}{}
+\begin{thebibliography}{1}
+
+\bibitem{rtp2}
+{Geeksforgeeks}.
+\newblock \href{www.geeksforgeeks.org/computer-networks/real-time-transport-protocol-rtp/} {Real-time Transport Protocol(RTP)}, 12-07-2025.
+
+\bibitem{rtp1}
+{Wikipedia}.
+\newblock \href{vi.wikipedia.org/wiki/Real-time_Transport_Protocol} {Real-time Transport Protocol}, 11-12-2022.
+
+\bibitem{rtsp1}
+{Wikipedia}.
+\newblock \href{en.wikipedia.org/wiki/Real-Time_Streaming_Protocol} {Real-Time Streaming Protocol}, 14-02-2022.
+
+\bibitem{mjpeg1}
+{Wikipedia}.
+\newblock \href{en.wikipedia.org/wiki/Motion_JPEG} {Motion JPEG}, 21-11-2018.
 
 \end{thebibliography}
