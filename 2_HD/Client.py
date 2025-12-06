@@ -127,9 +127,12 @@ class Client:
 					if frameId < self.frameNbr:
 						continue
 					if frameId > self.frameNbr:
-						if self.frameNbr >= 0 and frameId - self.frameNbr > 1:
-							self.frameLoss += frameId - self.frameNbr - 1
+						if self.frameNbr == -1:
+							self.nextExpectedFrame = frameId
+						elif frameId > self.nextExpectedFrame:
+							self.frameLoss += frameId - self.nextExpectedFrame
 						self.frameNbr = frameId
+						self.nextExpectedFrame = frameId + 1
 						self.frameBuffer.clear()
 					self.frameBuffer.extend(rtpPacket.getPayload()) # append the payload to the frame buffer
 					self.tryAssembleFrame()
@@ -365,7 +368,7 @@ class Client:
 		self.label.configure(image=photo)
 		self.label.image = photo
 
-	def onWindowResize(self):
+	def onWindowResize(self, event):
 		self.displayWidth = max(1, self.videoFrame.winfo_width())
 		self.displayHeight = max(1, self.videoFrame.winfo_height())
 		self.renderFrame()
