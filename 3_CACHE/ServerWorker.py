@@ -158,36 +158,72 @@ class ServerWorker:
 					#traceback.print_exc(file=sys.stdout)
 					#print('-'*60)
 
-	def makeRtp(self, payload, frameNbr):
-		"""RTP-packetize the video data."""
-		version = 2
-		padding = 0
-		extension = 0
-		cc = 0
-		marker = 0
-		pt = 26 # MJPEG type
-		seqnum = frameNbr
-		ssrc = 0 
-		
-		rtpPacket = RtpPacket()
-		
-		rtpPacket.encode(version, padding, extension, cc, seqnum, marker, pt, ssrc, payload)
-		
-		return rtpPacket.getPacket()
-		
-	def replyRtsp(self, code, seq):
-		"""Send RTSP reply to the client."""
-		if code == self.OK_200:
-			total_frames = self.clientInfo.get('totalFrames', 0)
-			#print("200 OK")
-			
-			#reply = 'RTSP/1.0 200 OK\nCSeq: ' + seq + '\nSession: ' + str(self.clientInfo['session'])+'\nTotal Frames:' + str(self.clientInfo.get('total_frames', 0))
-			reply = (
-    				'RTSP/1.0 200 OK\n'
-    				'CSeq: ' + seq + '\n'
-    				'Session: ' + str(self.clientInfo['session']) + '\n'
-    				'Total-Frames: ' + str(self.clientInfo.get('totalFrames', 0))
-			)
+    def makeRtp(self, payload, frameNbr):
+        # Phương thức này không còn được sử dụng trực tiếp trong sendRtp ,
+        # nhưng được giữ lại vì makeRtpFragmented bao gồm chức năng của nó.
+        """RTP-packetize the video data (single packet)."""
+        version = 2
+        padding = 0
+        extension = 0
+        cc = 0
+        marker = 1  # Marker luôn là 1 nếu là 1 gói duy nhất
+        pt = 26  # MJPEG type
+        seqnum = frameNbr  # Sử dụng frameNbr làm seqnum
+        ssrc = 0
+
+        rtpPacket = RtpPacket()
+        rtpPacket.encode(version, padding, extension, cc, seqnum, marker, pt, ssrc, payload)
+        return rtpPacket.getPacket()
+
+    def makeRtpFragmented(self, payload):
+        """Fragment large frames and return a list of RTP packets."""
+        version = 2
+        padding = 0
+        extension = 0
+        cc = 0
+        pt = 26  # MJPEG type
+        ssrc = 12345
+        MTU_SIZE = 1400
+
+
+        timestamp = int(time.time() * 1000)
+        frameNumber = self.clientInfo['videoStream'].frameNbr()  # Dùng frameNumber để client biết frame nào đang gửi
+
+        # Chia payload thành các chunk
+        chunks = []
+        for i in range(0, len(payload), MTU_SIZE):
+            chunks.append(payload[i:i + MTU_SIZE])
+
+        packets = []
+
+        for i, chunk in enumerate(chunks):
+            # Marker = 1 chỉ cho fragment CUỐI CÙNG của khung hình
+            marker = 1 if i == len(chunks) - 1 else 0
+
+            rtpPacket = RtpPacket()
+
+            # Số thứ tự (seqnum) tăng cho MỖI gói tin (fragment)
+            seqnum = self.sequenceNumber
+            self.sequenceNumber = (self.sequenceNumber + 1) % 65536
+
+            # Encode gói tin. Truyền timestamp vào để đảm bảo nhất quán.
+            rtpPacket.encode(version, padding, extension, cc, seqnum, marker, pt, ssrc, chunk, timestamp)
+
+            packets.append(rtpPacket.getPacket())
+
+        return packets
+
+    def replyRtsp(self, code, seq):
+        """Send RTSP reply to the client."""
+        if code == self.OK_200:
+            total_frames = self.clientInfo.get('totalFrames', 0)
+            reply = (
+                    'RTSP/1.0 200 OK\n'
+                    'CSeq: ' + seq + '\n'
+                                     'Session: ' + str(self.clientInfo['session']) + '\n'
+                                                                                     'Total-Frames: ' + str(
+                self.clientInfo.get('totalFrames', 0))
+            )
 
 			connSocket = self.clientInfo['rtspSocket'][0]
 			connSocket.send(reply.encode())
