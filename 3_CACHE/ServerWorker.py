@@ -28,6 +28,11 @@ class ServerWorker:
     def __init__(self, clientInfo):
         self.clientInfo = clientInfo
         self.sequenceNumber = 0  # Khởi tạo Sequence Number cho các gói RTP
+        self.rtp_clock_rate = 90000 # 90 kHz RTP clock
+        self. targetFPS = 30
+        self. tsPerFrame = int(self.rtp_clock_rate / self.targetFPS)
+        self.currentTimeStamp = 0
+
 
     def run(self):
         threading.Thread(target=self.recvRtspRequest).start()
@@ -133,47 +138,48 @@ class ServerWorker:
                 pass
 
     def sendRtp(self):
-        """Send RTP packets over UDP with fragmentation and FPS control."""
-        target_fps = 30
-        frame_interval = 1.0 / target_fps
+        targetfps = self.targetFPS
+        frameinterval = 1.0 / targetfps
+        nextSendTime = time.time() + 0.2  # small startup delay for client RTP readiness
 
-        # FIX: Độ trễ ngắn để client có thời gian khởi tạo socket RTP (khắc phục Connection Error ban đầu)
-        time.sleep(0.2)
+        # Initialize timestamp at PLAY
+        self.currentTimeStamp = 0
 
         while True:
-            frameStartFrame = time.time()
-
-            # Dừng gửi nếu request là PAUSE hoặc TEARDOWN
             if self.clientInfo['event'].isSet():
                 break
 
-            data = self.clientInfo['videoStream'].nextFrame()
-
-            if data:
-                try:
-                    address = self.clientInfo['rtspSocket'][1][0]
-                    port = int(self.clientInfo['rtpPort'])
-
-                    # Tạo danh sách các gói tin (có thể 1 gói hoặc nhiều gói phân mảnh)
-                    packets = self.makeRtpFragmented(data)
-
-                    for i, packet in enumerate(packets):
-                        # Gửi gói tin
-                        self.clientInfo['rtpSocket'].sendto(packet, (address, port))
-
-                        # Thêm độ trễ nhỏ giữa các fragment để tránh tràn bộ đệm UDP của client
-                        if len(packets) > 1 and i < len(packets) - 1:
-                            time.sleep(0.0005)
-
-                except:
-                    # Lỗi này chủ yếu do socket chưa sẵn sàng hoặc client đóng kết nối.
-                    print("Connection Error")
-
-            # FIX: Logic điều chỉnh tốc độ khung hình (FPS)
-            time_spent = time.time() - frameStartFrame
-            sleep_time = frame_interval - time_spent
+            # Pacing: wait until next scheduled frame send time
+            sleep_time = max(0, nextSendTime - time.time())
             if sleep_time > 0:
                 time.sleep(sleep_time)
+
+            data = self.clientInfo['videoStream'].nextFrame()
+            if not data:
+                # End of stream or read error; you might loop or break
+                continue
+
+            address = self.clientInfo['rtspSocket'][1][0]
+            port = int(self.clientInfo['rtpPort'])
+
+            # Use the same RTP timestamp for all fragments of this frame
+            timestamp = self.currentTimeStamp
+
+            packets = self.makeRtpFragmented(data, timestamp)
+
+            # Send fragments with tiny spacing to avoid UDP buffer bursts
+            for i, packet in enumerate(packets):
+                try:
+                    self.clientInfo['rtpSocket'].sendto(packet, (address, port))
+                except Exception as e:
+                    print("Connection Error:", e)
+                    break
+                if i + 1 < len(packets):
+                    time.sleep(0.001)  # slightly larger gap to smooth bursts
+
+            # Advance schedule and RTP timestamp
+            nextSendTime += frameinterval
+            self.currentTimeStamp = (self.currentTimeStamp + self.tsPerFrame) % (1 << 32)
 
     def makeRtp(self, payload, frameNbr):
         # Phương thức này không còn được sử dụng trực tiếp trong sendRtp ,
@@ -192,40 +198,25 @@ class ServerWorker:
         rtpPacket.encode(version, padding, extension, cc, seqnum, marker, pt, ssrc, payload)
         return rtpPacket.getPacket()
 
-    def makeRtpFragmented(self, payload):
-        """Fragment large frames and return a list of RTP packets."""
-        version = 2
-        padding = 0
-        extension = 0
-        cc = 0
-        pt = 26  # MJPEG type
+    def makeRtpFragmented(self, payload, timestamp):
+        version, padding, extension, cc = 2, 0, 0, 0
+        pt = 26  # MJPEG
         ssrc = 12345
         MTU_SIZE = 1400
 
-
-        timestamp = int(time.time() * 1000)
-        frameNumber = self.clientInfo['videoStream'].frameNbr()  # Dùng frameNumber để client biết frame nào đang gửi
-
-        # Chia payload thành các chunk
-        chunks = []
-        for i in range(0, len(payload), MTU_SIZE):
-            chunks.append(payload[i:i + MTU_SIZE])
-
+        # Fragment payload into MTU-sized chunks
+        chunks = [payload[i:i + MTU_SIZE] for i in range(0, len(payload), MTU_SIZE)]
         packets = []
 
         for i, chunk in enumerate(chunks):
-            # Marker = 1 chỉ cho fragment CUỐI CÙNG của khung hình
             marker = 1 if i == len(chunks) - 1 else 0
 
-            rtpPacket = RtpPacket()
-
-            # Số thứ tự (seqnum) tăng cho MỖI gói tin (fragment)
             seqnum = self.sequenceNumber
             self.sequenceNumber = (self.sequenceNumber + 1) % 65536
 
-            # Encode gói tin. Truyền timestamp vào để đảm bảo nhất quán.
-            rtpPacket.encode(version, padding, extension, cc, seqnum, marker, pt, ssrc, chunk, timestamp)
-
+            rtpPacket = RtpPacket()
+            rtpPacket.encode(version, padding, extension, cc,
+                             seqnum, marker, pt, ssrc, chunk, timestamp)
             packets.append(rtpPacket.getPacket())
 
         return packets
