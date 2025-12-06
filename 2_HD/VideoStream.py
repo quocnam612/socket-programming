@@ -1,55 +1,57 @@
 class VideoStream:
-	def __init__(self, filename): # Constructor
+	def __init__(self, filename):
 		self.filename = filename
 		try:
-			self.file = open(filename, 'rb') # read binary from file
+			self.file = open(filename, 'rb')
 		except:
-			raise IOError # throw Input/Output error
+			raise IOError
 		self.frameNum = 0
-		
-		self.lengthPrefixed = self._detectLengthPrefix()
-		if not self.lengthPrefixed:
-			self.rawFrames = self._loadRawFrames()
-			self.totalFrames = len(self.rawFrames)
-		else:
-			self.rawFrames = None
-			self.totalFrames = None
+		self.lengthPrefixed = self.detectLengthPrefix()
 
 	def nextFrame(self):
-		"""Get next frame."""
 		if self.lengthPrefixed:
 			data = self.file.read(5)
 			if data:
-				framelength = int(data)
-				data = self.file.read(framelength)
+				frameLength = int(data)
+				data = self.file.read(frameLength)
 				self.frameNum += 1
 			return data
-		else:
-			if self.rawFrames and self.frameNum < len(self.rawFrames):
-				frame = self.rawFrames[self.frameNum]
-				self.frameNum += 1
-				return frame
-			return b''
+		return self._readRawFrame()
 
 	def frameNbr(self):
 		"""Get frame number."""
 		return self.frameNum
 
-	def _detectLengthPrefix(self):
+	def detectLengthPrefix(self):
 		pos = self.file.tell()
 		peek = self.file.read(5)
 		self.file.seek(pos)
 		return peek.isdigit()
 
-	def _loadRawFrames(self):
-		content = self.file.read()
-		frames = []
-		start = content.find(b'\xff\xd8')
-		while start != -1:
-			end = content.find(b'\xff\xd9', start + 2)
-			if end == -1:
+	def _readRawFrame(self):
+		prev = self.file.read(1)
+		if not prev:
+			return b''
+
+		while True:
+			curr = self.file.read(1)
+			if not curr:
+				return b''
+			if prev == b'\xff' and curr == b'\xd8':
+				frame = bytearray(prev + curr)
 				break
-			frames.append(content[start:end + 2])
-			start = content.find(b'\xff\xd8', end + 2)
-		return frames
-	
+			prev = curr
+
+		while True:
+			curr = self.file.read(1)
+			if not curr:
+				break
+			frame += curr
+			if len(frame) >= 2 and frame[-2:] == b'\xff\xd9':
+				self.frameNum += 1
+				return bytes(frame)
+
+		if frame:
+			self.frameNum += 1
+			return bytes(frame)
+		return b''

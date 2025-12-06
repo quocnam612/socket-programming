@@ -1,7 +1,8 @@
 from tkinter import *
 import tkinter.messagebox
 from PIL import Image, ImageTk
-import socket, threading, sys, traceback, os
+import io
+import socket, threading, sys, traceback, os, time
 
 from RtpPacket import RtpPacket
 
@@ -37,25 +38,32 @@ class Client:
 		self.connectToServer()
 		self.frameNbr = -1
 
-		self.packetNbr = 0
-		self.frameLoss = 0
+		self.lastFrame = None # last frame received from the server
 		self.frameBuffer = bytearray() # buffer to hold the received segments until a full frame is assembled
-		self.displayWidth = 960
-		self.displayHeight = 540
-		self.lastFrame = None
+		self.frameLoss = 0 # total lost frames
+		self.packetCount = 0 # total received packets
+		self.frameCount = 0 # total received frames
+		self.bytesReceived = 0 # total received bytes
+		self.startTime = None # time when the video starts playing
+		self.frameTimes = [] # timestamps of received frames for FPS calculation
 		
 	def createWidgets(self):
 		"""Build GUI."""
+		# Make first row and 4 column expandable
 		self.master.grid_rowconfigure(0, weight=1)
 		for col in range(4):
 			self.master.grid_columnconfigure(col, weight=1)
-
+		
+		# Video display frame
 		self.videoFrame = Frame(self.master, bg="black")
 		self.videoFrame.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
-		self.videoFrame.bind("<Configure>", self.onVideoResize)
+		self.videoFrame.bind("<Configure>", self.onWindowResize)
 		self.label = Label(self.videoFrame, bg="black")
 		self.label.pack(fill=BOTH, expand=True)
+		self.displayWidth = self.videoFrame.winfo_width() or 640
+		self.displayHeight = self.videoFrame.winfo_height() or 360
 
+		# Control button frame
 		buttonFrame = Frame(self.master)
 		buttonFrame.grid(row=1, column=0, columnspan=4, sticky=E+W, padx=2, pady=2)
 		for col in range(4):
@@ -63,15 +71,18 @@ class Client:
 
 		self.setup = Button(buttonFrame, text="Setup", command=self.setupMovie)
 		self.setup.grid(row=0, column=0, padx=5, pady=2, sticky=E+W)
-		
 		self.start = Button(buttonFrame, text="Play", command=self.playMovie)
 		self.start.grid(row=0, column=1, padx=5, pady=2, sticky=E+W)
-		
 		self.pause = Button(buttonFrame, text="Pause", command=self.pauseMovie)
 		self.pause.grid(row=0, column=2, padx=5, pady=2, sticky=E+W)
-		
 		self.teardown = Button(buttonFrame, text="Teardown", command=self.exitClient)
 		self.teardown.grid(row=0, column=3, padx=5, pady=2, sticky=E+W)
+
+		# Stats label
+		self.statsVar = StringVar()
+		self.statsVar.set("Frame: 0 | Packets: 0 | Loss: 0 | FPS: 0.0 | Net: 0 kbps")
+		self.statsLabel = Label(self.master, textvariable=self.statsVar, anchor=W)
+		self.statsLabel.grid(row=2, column=0, columnspan=4, sticky=E+W, padx=5, pady=(0,5))
 	
 	def setupMovie(self):
 		"""Setup button handler."""
@@ -96,6 +107,8 @@ class Client:
 			threading.Thread(target=self.listenRtp).start() # create a thread to run listenRtp function simultaneously
 			self.playEvent = threading.Event() # stopping signal for the thread
 			self.playEvent.clear() # clear() function resets the internal flag to false which means the thread will run (set() would stop the thread meaning the internal flag is true -> pause)
+			if self.startTime is None: # first time play
+				self.startTime = time.time()
 			self.sendRtspRequest(self.PLAY)
 	
 	def listenRtp(self):		
@@ -104,6 +117,8 @@ class Client:
 			try:
 				data = self.rtpSocket.recv(20480) # 20KB (20480 bytes) is the maximum size of an RTP packet
 				if data:
+					self.packetCount += 1
+					self.bytesReceived += len(data)
 					rtpPacket = RtpPacket()
 					rtpPacket.decode(data)
 					
@@ -113,9 +128,11 @@ class Client:
 					if frameId < self.frameNbr:
 						continue
 					if frameId > self.frameNbr:
+						if self.frameNbr >= 0 and frameId - self.frameNbr > 1:
+							self.frameLoss += frameId - self.frameNbr - 1
 						self.frameNbr = frameId
 						self.frameBuffer.clear()
-					self.frameBuffer.extend(rtpPacket.getPayload())
+					self.frameBuffer.extend(rtpPacket.getPayload()) # append the payload to the frame buffer
 					self.tryAssembleFrame()
 			except:
 				# Stop listening upon requesting PAUSE or TEARDOWN
@@ -147,49 +164,10 @@ class Client:
 		"""Update the image file as video frame in the GUI."""
 		img = Image.open(imageFile)
 		self.lastFrame = img.copy()
+		self.frameTimes.append(time.time())
 		self.renderFrame()
+		self.updateStats()
 
-	def renderFrame(self):
-		"""Render the cached frame scaled to fit the current window."""
-		if self.lastFrame is None:
-			return
-		frame_w = self.videoFrame.winfo_width() or self.displayWidth
-		frame_h = self.videoFrame.winfo_height() or self.displayHeight
-		scale = min(frame_w / self.lastFrame.width, frame_h / self.lastFrame.height)
-		if scale <= 0:
-			scale = 1
-		new_size = (
-			max(1, int(self.lastFrame.width * scale)),
-			max(1, int(self.lastFrame.height * scale)),
-		)
-		img = self.lastFrame if new_size == (self.lastFrame.width, self.lastFrame.height) else self.lastFrame.resize(new_size, Image.LANCZOS)
-		photo = ImageTk.PhotoImage(img)
-		self.label.configure(image=photo)
-		self.label.image = photo
-
-	def onVideoResize(self, event):
-		self.displayWidth = max(1, event.width)
-		self.displayHeight = max(1, event.height)
-		self.renderFrame()
-
-	def tryAssembleFrame(self):
-		"""Reassemble JPEG frame using SOI/EOI markers inside buffered payload."""
-		while True:
-			start = self.frameBuffer.find(SOI)
-			if start == -1:
-				# nothing looks like frame start; drop garbage
-				self.frameBuffer.clear()
-				break
-			end = self.frameBuffer.find(EOI, start + 2)
-			if end == -1:
-				# wait for the rest of the frame
-				if start > 0:
-					del self.frameBuffer[:start]
-				break
-			frame = self.frameBuffer[start:end + 2]
-			del self.frameBuffer[:end + 2]
-			self.updateMovie(self.writeFrame(frame))
-		
 	def connectToServer(self):
 		"""Connect to the Server. Start a new RTSP/TCP session."""
 		self.rtspSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # create a TCP socket (rtspSocket) attribute to connect to the server for RTSP (AF_INET: IPV4, SOCK_STREAM: TCP)
@@ -369,3 +347,69 @@ class Client:
 			self.exitClient()
 		else: # When the user presses cancel, resume playing.
 			self.playMovie()
+
+	def renderFrame(self):
+		"""Render the cached frame scaled to fit the current window."""
+		if self.lastFrame is None:
+			return
+		frame_w = self.videoFrame.winfo_width() or self.displayWidth
+		frame_h = self.videoFrame.winfo_height() or self.displayHeight
+		scale = min(frame_w / self.lastFrame.width, frame_h / self.lastFrame.height)
+		if scale <= 0:
+			scale = 1
+		new_size = (
+			max(1, int(self.lastFrame.width * scale)),
+			max(1, int(self.lastFrame.height * scale)),
+		)
+		img = self.lastFrame if new_size == (self.lastFrame.width, self.lastFrame.height) else self.lastFrame.resize(new_size, Image.LANCZOS)
+		photo = ImageTk.PhotoImage(img)
+		self.label.configure(image=photo)
+		self.label.image = photo
+
+	def onWindowResize(self):
+		self.displayWidth = max(1, self.videoFrame.winfo_width())
+		self.displayHeight = max(1, self.videoFrame.winfo_height())
+		self.renderFrame()
+
+	def tryAssembleFrame(self):
+		"""Reassemble JPEG frame using SOI/EOI markers inside buffered payload."""
+		while True:
+			start = self.frameBuffer.find(SOI)
+			if start == -1:
+				# nothing looks like frame start; drop garbage
+				self.frameBuffer.clear()
+				break
+			end = self.frameBuffer.find(EOI, start + 2)
+			if end == -1:
+				# wait for the rest of the frame
+				if start > 0:
+					del self.frameBuffer[:start]
+				break
+			frame = self.frameBuffer[start:end + 2]
+			del self.frameBuffer[:end + 2]
+			if not self.isValidFrame(frame):
+				self.frameLoss += 1
+				continue
+			self.updateMovie(self.writeFrame(frame))
+		
+	def updateStats(self):
+		if self.startTime is None:
+			return
+		now = time.time()
+		while self.frameTimes and now - self.frameTimes[0] > 1.0:
+			self.frameTimes.pop(0) # keep only timestamps within the last second
+		elapsed = max(0.001, now - self.startTime) 
+		fps = len(self.frameTimes)
+		throughput = (self.bytesReceived * 8 / 1000) / elapsed
+		self.statsVar.set(
+			f"Frame: {self.frameNbr} | Packets: {self.packetCount} | Loss: {self.frameLoss} | FPS: {fps:.1f} | Net: {throughput:.1f} kbps"
+		)
+	def isValidFrame(self, data):
+		"""Check if a frame looks valid by ensuring it starts/ends with markers and Pillow can open it."""
+		if not data.startswith(b'\xff\xd8') or not data.endswith(b'\xff\xd9'):
+			return False
+		try:
+			Image.open(io.BytesIO(data)).verify()
+			return True
+		except Exception:
+			return False
