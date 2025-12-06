@@ -3,8 +3,6 @@ import tkinter.messagebox
 from PIL import Image, ImageTk
 import socket, threading, sys, traceback, os
 
-from requests import Session
-
 from RtpPacket import RtpPacket
 
 CACHE_FILE_NAME = "cache-"

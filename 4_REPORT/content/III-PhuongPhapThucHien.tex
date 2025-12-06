@@ -85,7 +85,7 @@ Hoàn thiện hàm kết nối tới port của RTP - openRtpPort():
 \lstinputlisting[language=Python]{code/openRtpPort.py}
 \begin{itemize}
     \item Client khởi tạo socket UDP (\texttt{AF\_INET, SOCK\_DGRAM}) (AF\_INET: IPv4, SOCK\_DGRAM: UDP) cùng timeout ngắn để việc nhận khung không bị block.
-    \item Hàm bind trực tiếp vào \texttt{rtpPort}; nếu cổng đã được sử dụng, người dùng sẽ được cảnh báo không thể bind port đó.
+    \item Hàm bind trực tiếp vào \texttt{rtpPort}; nếu cổng đã được sử dụng, chương trình sẽ cảnh báo không thể bind port đó.
 \end{itemize}
 
 \subsubsection{Hoàn thiện RtpPacket.py - Giao thức RTP của server}
@@ -182,7 +182,7 @@ Các file trong phần này nằm trong thư mục \textbf{3\_Client\_Cache}. \\
 Đây là phiên bản nâng cấp của phần 2 và cũng là phiên bảng cuối cùng nhằm cải thiện trải nghiệm xem video HD bằng cách thêm bộ đệm (buffer) trên client. \\
 
 \subsubsection{Ý tưởng}
-Khắc phục nhược điểm của phần 2 bằng cách thêm bộ đệm (buffer) trên client để lưu trữ trước một số frame video nhất định trước khi phát. Khi người dùng nhấn Play, client sẽ bắt đầu nhận các gói RTP và lưu trữ các frame vào bộ đệm cho đến khi đạt ngưỡng đã định sẵn (ví dụ: 30 frame). Sau đó, client mới bắt đầu phát video từ bộ đệm trong khi tiếp tục nhận và lưu trữ các frame mới vào bộ đệm. Điều này giúp đảm bảo rằng có đủ frame để phát liên tục ngay cả khi tốc độ tải về chậm hơn tốc độ phát video. 
+Khắc phục nhược điểm của phần 2 bằng cách thêm bộ đệm (buffer) trên client để lưu trữ trước một số frame video nhất định trước khi phát. Khi nhấn Play, client sẽ bắt đầu nhận các gói RTP và lưu trữ các frame vào bộ đệm cho đến khi đạt ngưỡng đã định sẵn (ví dụ: 30 frame). Sau đó, client mới bắt đầu phát video từ bộ đệm trong khi tiếp tục nhận và lưu trữ các frame mới vào bộ đệm. Điều này giúp đảm bảo rằng có đủ frame để phát liên tục ngay cả khi tốc độ tải về chậm hơn tốc độ phát video. 
 
 \subsubsection{Hoàn thiện cơ chế bộ đệm phía client}
 
