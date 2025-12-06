@@ -1,10 +1,13 @@
 from tkinter import *
 import tkinter.messagebox
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageFile
+from PIL import UnidentifiedImageError
+import io
 import socket, threading, os, time
 from collections import deque
-
 from RtpPacket import RtpPacket
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
@@ -62,14 +65,17 @@ class Client:
         self.frameCount = 0
         self.totalFrames = 0
         self.frameBuffer = []
-        self.MIN_BUFFER_SIZE = 20
-        self.MAX_BUFFER_SIZE = 50 # kích thước tối đa cho buffer
+        self.MIN_BUFFER_SIZE = 50
+        self.MAX_BUFFER_SIZE = 100 # kích thước tối đa cho buffer
 
 
     def createWidgets(self):
         """Build GUI."""
         self.master.grid_rowconfigure(0, weight=1)
         self.master.grid_columnconfigure(0, weight=1)
+        self.master.grid_columnconfigure(1, weight=1)
+        self.master.grid_columnconfigure(2, weight=1)
+        self.master.grid_columnconfigure(3, weight=1)
 
         # Create Setup button
         self.setup = Button(self.master, width=20, padx=3, pady=3)
@@ -133,17 +139,12 @@ class Client:
         """Pause button handler."""
         if self.state == self.PLAYING:
             self.sendRtspRequest(self.PAUSE)
+            self.bufferReady = False
 
     def playMovie(self):
         """Play button handler."""
         if self.state == self.READY:
-            self.frameFragments.clear()
-            with self.queueLock:
-                self.frameQueue.clear()
-                self.packetLoss = 0
-                self.legacyMode = False
-                self.markerSeen = False
-                self.markerlessPackets = 0
+
             self.bytesReceived = 0
             self.framesDisplayed = 0
             self.lastSeq = 0
@@ -195,19 +196,22 @@ class Client:
 
         return cachename  # return the file name (e.g. cache-12345.jpg)
 
-    def updateMovie(self, imageFile):
-        """Update the image file as video frame in the GUI."""
-        photo = ImageTk.PhotoImage(Image.open(
-            imageFile))  # open the image file and convert it to a PhotoImage object (Tkinter compatible photo image)
-        self.label.configure(image=photo)  # update the label with the new image
-        self.label.image = photo  # keep a reference to avoid garbage collection (the image disappears)
+    def updateMovie(self, frameData):
+        try:
+            image = Image.open(io.BytesIO(frameData))
+            image.load()  # force full read
+            photo = ImageTk.PhotoImage(image)
+        except UnidentifiedImageError:
+            print("Skipping invalid frame")
+            return
+
+        self.label.configure(image=photo)
+        self.label.image = photo
         self.canvas.itemconfigure(self.imageWindow, width=photo.width(), height=photo.height())
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-        currentTime = time.time()
-        self.lastFrameTime = currentTime
+        self.lastFrameTime = time.time()
         self.frameCount += 1
-
         self.drawProgressBar()
 
     def drawProgressBar(self):
@@ -217,28 +221,33 @@ class Client:
             self.progressCanvas = Canvas(self.master, width=W, height=H,
                                          bg="black", highlightthickness=0)
             self.progressCanvas.grid(row=3, column=0, columnspan=4, pady=5)
+
+            # Add a label below the bar for percentages
+            self.progressLabel = Label(self.master, text="", anchor="w", font=("Arial", 10, "bold"))
+            self.progressLabel.grid(row=4, column=0, columnspan=4, pady=2)
+
         self.progressCanvas.delete("all")
 
         # --- PROGRESS BAR (red) ---
         progress_ratio = min(self.playedFrames / self.totalFrames, 1.0) if self.totalFrames > 0 else 0
         progress_w = int(progress_ratio * W)
-
         if progress_w > 0:
             self.progressCanvas.create_rectangle(0, 0, progress_w, H, fill="red", outline="red")
 
         # --- BUFFER BAR (gray) ---
         buffer_ratio = len(self.frameBuffer) / self.MAX_BUFFER_SIZE
         buffer_w = int(buffer_ratio * W)
-
         if buffer_w > 0:
-            # Draw buffer bar starting at the end of the red bar
             self.progressCanvas.create_rectangle(progress_w, 0, progress_w + buffer_w, H,
                                                  fill="gray", outline="gray")
 
-        # --- PROGRESS BAR (đỏ) ---
-
-        if progress_w > 0:
-            self.progressCanvas.create_rectangle(0, 0, progress_w, H, fill="red", outline="red")
+        # --- Update percentage label ---
+        played_pct = int(progress_ratio * 100)
+        buffered_pct = int(buffer_ratio * 100)
+        buffered_remain = len(self.frameQueue)
+        self.progressLabel.config(
+            text=f"Played: {played_pct}% ({self.playedFrames}/{self.totalFrames}) | Buffered: {buffered_pct}% BufferRemain: {buffered_remain}"
+        )
 
     def connectToServer(self):
         """Connect to the Server. Start a new RTSP/TCP session."""
@@ -430,7 +439,6 @@ class Client:
             tkinter.messagebox.showwarning('Unable to Bind', 'Unable to bind PORT=%d' % self.rtpPort)
 
     def handleRtpPacket(self, rtpPacket, packetSize):
-        """Aggregate RTP fragments and push full frames to the playback buffer."""
         currSeqNum = rtpPacket.seqNum()
 
         # Track packet loss
@@ -443,28 +451,22 @@ class Client:
         self.bytesReceived += packetSize
 
         marker = rtpPacket.marker()
-        if marker:
-            self.markerSeen = True
-        elif not self.markerSeen:
-            self.markerlessPackets += 1
-            if self.markerlessPackets > LEGACY_DETECT_THRESHOLD:
-                self.enableLegacyMode()
-
-        # Use timestamp as frame ID (safer than seqNum)
         frameId = rtpPacket.timestamp()
+
+        # Flush previous frame if timestamp changed
+        if hasattr(self, "lastTimestamp") and frameId != self.lastTimestamp:
+            if self.lastTimestamp in self.frameFragments:
+                frameData = bytes(self.frameFragments.pop(self.lastTimestamp))
+                self.enqueueFrame(self.lastTimestamp, frameData)
+        self.lastTimestamp = frameId
+
         fragment = self.frameFragments.setdefault(frameId, bytearray())
         fragment.extend(rtpPacket.getPayload())
 
-        # Finalize only when marker bit is set (or legacy mode fallback)
-        finalize = marker or self.legacyMode
-        if finalize and frameId in self.frameFragments:
+        # Finalize on marker
+        if marker and frameId in self.frameFragments:
             frameData = bytes(self.frameFragments.pop(frameId))
-
-            # Validate JPEG magic bytes before enqueue
-            if frameData.startswith(b'\xff\xd8') and frameData.endswith(b'\xff\xd9'):
-                self.enqueueFrame(frameId, frameData)
-            else:
-                print(f"Discarded invalid frame {frameId}, size={len(frameData)}")
+            self.enqueueFrame(frameId, frameData)
 
         self.updateStatsLabel()
 
@@ -474,15 +476,25 @@ class Client:
         self.frameFragments.clear()
 
     def enqueueFrame(self, frameId, frameData):
+        # sanity check: skip empty or too-small frames
+        if not frameData or len(frameData) < 100:  # adjust threshold
+            return
         with self.queueLock:
             self.frameQueue.append((frameId, frameData))
-            while len(self.frameQueue) > 120:
+            self.frameBuffer.append(frameId)
+            if len(self.frameQueue) > 50:
                 self.frameQueue.popleft()
+            if len(self.frameBuffer) > self.MAX_BUFFER_SIZE:
+                self.frameBuffer.pop(0)
         self.bufferEvent.set()
 
     def playbackLoop(self):
         """Display frames at a steady cadence for smooth playback."""
         nextFrameDeadline = time.time()
+        # init tạo pre-buffer giúp video load ổn định hơn
+        while (len(self.frameQueue) < self.MIN_BUFFER_SIZE) and not self.displayEvent.isSet():
+            self.drawProgressBar()
+            time.sleep(0.05)
         while not self.displayEvent.is_set():
             frame = None
             with self.queueLock:
@@ -494,7 +506,7 @@ class Client:
                 self.frameNbr = frameId
                 self.framesDisplayed += 1
                 self.playedFrames += 1
-                self.updateMovie(self.writeFrame(frameData))
+                self.updateMovie(frameData)
                 self.updateStatsLabel()
                 nextFrameDeadline = max(time.time(), nextFrameDeadline)
                 sleepTime = max(0, nextFrameDeadline - time.time())
