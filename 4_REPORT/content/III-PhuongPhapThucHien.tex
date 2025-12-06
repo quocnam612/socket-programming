@@ -143,15 +143,44 @@ Các file trong phần này nằm trong thư mục \textbf{2\_HD\_Video\_Streami
 \subsubsection{Ý tưởng}
 Khắc phục nhược điểm của phần 1 bằng cách chia nhỏ frame video thành các mảnh (fragment) có kích thước phù hợp với gói UDP dựa trên MTU (1500 bytes).
 
-
-
-Mỗi fragment sẽ được đóng gói trong một gói RTP riêng biệt với đầy đủ header và payload. Client sẽ nhận các gói RTP, tái tạo lại các fragment và ghép chúng lại thành frame hoàn chỉnh bằng cách nhận diện các SOI, EOI trong payload (Marker Bit không được sử dụng do đã bị giới hạn giá trị bằng 0).
+Mỗi fragment sẽ được đóng gói trong một gói RTP riêng biệt (max 20Kb) với đầy đủ header và payload. Client sẽ nhận các gói RTP, tái tạo lại các fragment và ghép chúng lại thành frame hoàn chỉnh bằng cách nhận diện các SOI, EOI trong payload (Marker Bit không được sử dụng do đã bị giới hạn giá trị bằng 0).
 
 \subsubsection{Hoàn thiện cơ chế chia nhỏ frame thành các fragment}
+Trước hết để xử lý các video HD không có prefix cho biết độ dài frame, ta cần thêm một số phương thức trong file \textbf{VideoStream.py}:
+
+\lstinputlisting[language=Python]{code/detectLengthPrefix.py}
+Phương thức này để kiểm tra xem file video có sử dụng length prefix (5 bytes đầu chứa số độ dài frame) hay không. Nếu có, ta sẽ sử dụng phương thức cũ để đọc frame. Nếu không, ta sẽ sử dụng phương thức bên dưới.
+
+\lstinputlisting[language=Python]{code/loadRawFrames.py}
+Phương thức này sẽ lưu các frame video vào một danh sách (danh sách này sẽ được lưu bên phía server) bằng cách tìm kiếm các byte SOI (Start of Image - \texttt{0xFFD8}) và EOI (End of Image - \texttt{0xFFD9}) trong file video. Mỗi khi tìm thấy một cặp SOI và EOI, ta sẽ trích xuất dữ liệu giữa chúng và lưu vào danh sách frames.
+
+\lstinputlisting[language=Python]{code/nextFrame.py}
+Phương thức này sẽ trả về frame tiếp theo tùy theo loại Mjpeg của video và cộng thêm 1 cho chỉ số thứ tự frame hiện tại:
+\begin{itemize}
+    \item Nếu video có length prefix, ta sẽ đọc 5 bytes đầu để lấy độ dài frame - \texttt{framelength}, sau đó đọc \texttt{framelength} tiếp theo là dữ liệu frame.
+    \item Nếu video không có length prefix, ta sẽ lấy frame từ danh sách frames đã lưu trước đó.
+\end{itemize}
+
+Tiếp theo, ta sẽ chỉnh sửa hàm gửi RTP server phía server trong \textbf{ServerWorker.py} để chia nhỏ frame thành các fragment và gửi từng fragment trong một gói RTP riêng biệt:
+
+\lstinputlisting[language=Python]{code/sendRtp.py}
+Việc gửi RTP sẽ được thực hiện liên tục trong vòng lặp cho đến khi nhấn \texttt{PAUSE}, cụ thể:
+\begin{enumerate}
+    \item Lấy 1 frame tiếp theo bằng hàm \texttt{nextFrame()}.
+    \item Chia frame này thành các fragment có kích thước \texttt{MAX\_PAYLOAD} (1500 bytes) để đảm bảo không vượt quá giới hạn của gói UDP.
+    \item Mỗi fragment sẽ được đóng gói trong một gói RTP riêng biệt với đầy đủ header và payload bằng hàm \texttt{RtpPacket.encode()}.
+    \item Gửi từng gói RTP qua socket UDP tới client.
+\end{enumerate}
+
+Cuối cùng, ta sẽ chỉnh sửa hàm nhận RTP client và thêm một số hàm cần thiết trong \textbf{Client.py} để tái tạo lại các fragment và ghép chúng thành frame hoàn chỉnh:
+
+\lstinputlisting[language=Python]{code/tryAssembleFrame.py}
 
 
 
 \subsubsection{Hoàn thiện cơ chế bỏ qua các frame bị trễ để đảm bảo đồ mượt khi phát video}
+
+\lstinputlisting[language=Python]{code/listenRtp.py}
 
 
 
@@ -165,7 +194,7 @@ Mỗi fragment sẽ được đóng gói trong một gói RTP riêng biệt vớ
 
 \subsection{Bổ sung client cache (2.5đ)}
 Các file trong phần này nằm trong thư mục \textbf{3\_Client\_Cache}. \\
-Đây là phiên bản nâng cấp của phần 2 và cũng là phiên bảng cuối cùng nhằm cải thiện trải nghiệm xem video HD bằng cách thêm bộ đệm (buffer) trên client. \\
+Đây là phiên bản nâng cấp của phần 2 và cũng là phiên bảng cuối cùng nhằm cải thiện trải nghiệm xem video HD bằng cách thêm bộ đệm (buffer) trên client.
 
 \subsubsection{Ý tưởng}
 Khắc phục nhược điểm của phần 2 bằng cách thêm bộ đệm (buffer) trên client để lưu trữ trước một số frame video nhất định trước khi phát. Khi nhấn Play, client sẽ bắt đầu nhận các gói RTP và lưu trữ các frame vào bộ đệm cho đến khi đạt ngưỡng đã định sẵn (ví dụ: 30 frame). Sau đó, client mới bắt đầu phát video từ bộ đệm trong khi tiếp tục nhận và lưu trữ các frame mới vào bộ đệm. Điều này giúp đảm bảo rằng có đủ frame để phát liên tục ngay cả khi tốc độ tải về chậm hơn tốc độ phát video. 

@@ -1,7 +1,6 @@
 from tkinter import *
 import tkinter.messagebox
 from PIL import Image, ImageTk
-import io
 import socket, threading, sys, traceback, os, time
 
 from RtpPacket import RtpPacket
@@ -387,9 +386,6 @@ class Client:
 				break
 			frame = self.frameBuffer[start:end + 2]
 			del self.frameBuffer[:end + 2]
-			if not self.isValidFrame(frame):
-				self.frameLoss += 1
-				continue
 			self.updateMovie(self.writeFrame(frame))
 		
 	def updateStats(self):
@@ -404,12 +400,3 @@ class Client:
 		self.statsVar.set(
 			f"Frame: {self.frameNbr} | Packets: {self.packetCount} | Loss: {self.frameLoss} | FPS: {fps:.1f} | Net: {throughput:.1f} kbps"
 		)
-	def isValidFrame(self, data):
-		"""Check if a frame looks valid by ensuring it starts/ends with markers and Pillow can open it."""
-		if not data.startswith(b'\xff\xd8') or not data.endswith(b'\xff\xd9'):
-			return False
-		try:
-			Image.open(io.BytesIO(data)).verify()
-			return True
-		except Exception:
-			return False

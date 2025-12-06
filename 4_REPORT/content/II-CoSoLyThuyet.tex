@@ -61,12 +61,11 @@ Client và server giao tiếp bằng mô hình request–response, trong đó m�
 
 \subsection{MJPEG - Motion JPEG}
 MJPEG (Motion JPEG) là định dạng video được tạo ra bằng cách nối liên tiếp nhiều ảnh JPEG độc lập theo thời gian để tạo thành chuỗi chuyển động. \cite{mjpeg1} \\
-Cấu trúc của một frame MJPEG bao gồm:
-\begin{itemize}
-    \item Mỗi frame được lưu dưới dạng ảnh JPEG đầy đủ.
-    \item Trước mỗi frame có một 5-byte header mô tả độ dài frame.
-    \item JPEG frame bắt đầu bằng \texttt{0xFF 0xD8} (SOI) và kết thúc bằng \texttt{0xFF 0xD9} (EOI).
-\end{itemize}
+Mỗi frame được lưu dưới dạng ảnh JPEG đầy đủ với 1 trong các cấu trúc sau:
+\begin{enumerate}
+    \item Trước mỗi frame có một 5-byte prefix mô tả độ dài frame đơn vị byte (file video có sẵn trong bài lab).
+    \item JPEG frame bắt đầu bằng \texttt{0xFF 0xD8} (SOI) và kết thúc bằng \texttt{0xFF 0xD9} (EOI) (các file video từ nguồn khác).
+\end{enumerate}
 
 \subsection{MTU - Maximum Transmission Unit}
 MTU (Maximum Transmission Unit) là kích thước tối đa của một đơn vị dữ liệu có thể được truyền đi trong một frame hoặc một gói tin trên một phương tiện mạng (network interface) mà không cần bị phân mảnh (fragmentation). \cite{mtu1}
