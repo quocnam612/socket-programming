@@ -57,10 +57,12 @@ class Client:
         self.markerSeen = False
         self.markerlessPackets = 0
 
+
+        self.playedFrames = 0
         self.frameCount = 0
         self.totalFrames = 0
         self.frameBuffer = []
-        self.MIN_BUFFER_SIZE = 10
+        self.MIN_BUFFER_SIZE = 20
         self.MAX_BUFFER_SIZE = 50 # kích thước tối đa cho buffer
 
 
@@ -151,8 +153,11 @@ class Client:
             self.displayEvent = threading.Event()
             self.displayEvent.clear()
             self.bufferEvent.clear()
+
             # Create a new thread to listen for RTP packets
+
             threading.Thread(target=self.listenRtp, daemon=True).start()
+
             self.playbackThread = threading.Thread(target=self.playbackLoop, daemon=True)
             self.playbackThread.start()
             self.sendRtspRequest(self.PLAY)
@@ -168,19 +173,10 @@ class Client:
                     rtpPacket = RtpPacket()
                     rtpPacket.decode(data)
                     self.handleRtpPacket(rtpPacket, len(data))
-                    currFrameNbr = rtpPacket.seqNum()
-                    if currFrameNbr > self.frameNbr:
-                        self.frameNbr = currFrameNbr
-                        self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
 
-                        frameData = rtpPacket.getPayload()
+                    # BỎ TOÀN BỘ LOGIC CẬP NHẬT FRAME Ở ĐÂY
+                    # Việc cập nhật frame do luồng playbackLoop() đảm nhiệm
 
-                        if len(getattr(self,'frameBuffer',[])) < self.MAX_BUFFER_SIZE:
-                            self.frameBuffer.append(frameData)
-                        self.frameCount += 1
-                        self.updateMovie(self.writeFrame(frameData))
-                        if self.frameBuffer:
-                            self.frameBuffer.pop(0)
             except socket.timeout:
                 continue
             except OSError:
@@ -223,16 +219,21 @@ class Client:
             self.progressCanvas.grid(row=3, column=0, columnspan=4, pady=5)
         self.progressCanvas.delete("all")
 
-        # --- BUFFER BAR (xám) ---
-
-        progress_ratio = min(self.frameNbr / self.totalFrames, 1.0) if self.totalFrames > 0 else 0
+        # --- PROGRESS BAR (red) ---
+        progress_ratio = min(self.playedFrames / self.totalFrames, 1.0) if self.totalFrames > 0 else 0
         progress_w = int(progress_ratio * W)
 
-        buffer_w = int((len(self.frameBuffer) / self.MAX_BUFFER_SIZE) * W) + progress_w
-        buffer_w = min(max(buffer_w, 0), W)
+        if progress_w > 0:
+            self.progressCanvas.create_rectangle(0, 0, progress_w, H, fill="red", outline="red")
+
+        # --- BUFFER BAR (gray) ---
+        buffer_ratio = len(self.frameBuffer) / self.MAX_BUFFER_SIZE
+        buffer_w = int(buffer_ratio * W)
 
         if buffer_w > 0:
-            self.progressCanvas.create_rectangle(0, 0, buffer_w, H, fill="gray", outline="gray")
+            # Draw buffer bar starting at the end of the red bar
+            self.progressCanvas.create_rectangle(progress_w, 0, progress_w + buffer_w, H,
+                                                 fill="gray", outline="gray")
 
         # --- PROGRESS BAR (đỏ) ---
 
@@ -338,6 +339,8 @@ class Client:
 
         print('\nData sent:\n' + request)
 
+
+
     def recvRtspReply(self):
         """Receive RTSP reply from the server."""
         while True:
@@ -429,8 +432,11 @@ class Client:
     def handleRtpPacket(self, rtpPacket, packetSize):
         """Aggregate RTP fragments and push full frames to the playback buffer."""
         currSeqNum = rtpPacket.seqNum()
+
+        # Track packet loss
         if self.lastSeq and currSeqNum > self.lastSeq + 1:
             self.packetLoss += currSeqNum - self.lastSeq - 1
+            self.updateStatsLabel()
         if currSeqNum > self.lastSeq:
             self.lastSeq = currSeqNum
 
@@ -444,15 +450,23 @@ class Client:
             if self.markerlessPackets > LEGACY_DETECT_THRESHOLD:
                 self.enableLegacyMode()
 
-        frameId = currSeqNum if self.legacyMode else rtpPacket.timestamp()
+        # Use timestamp as frame ID (safer than seqNum)
+        frameId = rtpPacket.timestamp()
         fragment = self.frameFragments.setdefault(frameId, bytearray())
         fragment.extend(rtpPacket.getPayload())
 
+        # Finalize only when marker bit is set (or legacy mode fallback)
         finalize = marker or self.legacyMode
-        if finalize:
-            frameData = bytes(fragment)
-            self.frameFragments.pop(frameId, None)
-            self.enqueueFrame(frameId, frameData)
+        if finalize and frameId in self.frameFragments:
+            frameData = bytes(self.frameFragments.pop(frameId))
+
+            # Validate JPEG magic bytes before enqueue
+            if frameData.startswith(b'\xff\xd8') and frameData.endswith(b'\xff\xd9'):
+                self.enqueueFrame(frameId, frameData)
+            else:
+                print(f"Discarded invalid frame {frameId}, size={len(frameData)}")
+
+        self.updateStatsLabel()
 
     def enableLegacyMode(self):
         self.legacyMode = True
@@ -469,7 +483,7 @@ class Client:
     def playbackLoop(self):
         """Display frames at a steady cadence for smooth playback."""
         nextFrameDeadline = time.time()
-        while not self.displayEvent.isSet():
+        while not self.displayEvent.is_set():
             frame = None
             with self.queueLock:
                 if self.frameQueue:
@@ -479,6 +493,7 @@ class Client:
                 frameId, frameData = frame
                 self.frameNbr = frameId
                 self.framesDisplayed += 1
+                self.playedFrames += 1
                 self.updateMovie(self.writeFrame(frameData))
                 self.updateStatsLabel()
                 nextFrameDeadline = max(time.time(), nextFrameDeadline)
