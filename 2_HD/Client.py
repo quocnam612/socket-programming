@@ -7,6 +7,8 @@ from RtpPacket import RtpPacket
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
+SOI = b'\xff\xd8'
+EOI = b'\xff\xd9'
 
 class Client:
 	INIT = 0
@@ -34,36 +36,43 @@ class Client:
 		self.teardownAcked = 0 # Flag to indicate if teardown is acknowledged
 		self.connectToServer()
 		self.frameNbr = 0
+		self.frameBuffer = bytearray() # buffer to hold the received segments until a full frame is assembled
 		
 	def createWidgets(self):
 		"""Build GUI."""
-		# Create Setup button
-		self.setup = Button(self.master, width=20, padx=3, pady=3)
-		self.setup["text"] = "Setup"
-		self.setup["command"] = self.setupMovie
-		self.setup.grid(row=1, column=0, padx=2, pady=2)
-		
-		# Create Play button		
-		self.start = Button(self.master, width=20, padx=3, pady=3)
-		self.start["text"] = "Play"
-		self.start["command"] = self.playMovie
-		self.start.grid(row=1, column=1, padx=2, pady=2)
-		
-		# Create Pause button			
-		self.pause = Button(self.master, width=20, padx=3, pady=3)
-		self.pause["text"] = "Pause"
-		self.pause["command"] = self.pauseMovie
-		self.pause.grid(row=1, column=2, padx=2, pady=2)
-		
-		# Create Teardown button
-		self.teardown = Button(self.master, width=20, padx=3, pady=3)
-		self.teardown["text"] = "Teardown"
-		self.teardown["command"] =  self.exitClient
-		self.teardown.grid(row=1, column=3, padx=2, pady=2)
-		
-		# Create a label to display the movie
-		self.label = Label(self.master, height=19)
-		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5) 
+		self.master.grid_rowconfigure(0, weight=1)
+		self.master.grid_columnconfigure(0, weight=1)
+
+		# Video canvas with scrollbars
+		self.canvas = Canvas(self.master, highlightthickness=0)
+		self.canvas.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
+		self.vscroll = Scrollbar(self.master, orient=VERTICAL, command=self.canvas.yview)
+		self.vscroll.grid(row=0, column=4, sticky=N+S)
+		self.hscroll = Scrollbar(self.master, orient=HORIZONTAL, command=self.canvas.xview)
+		self.hscroll.grid(row=2, column=0, columnspan=4, sticky=E+W, padx=5)
+		self.canvas.configure(yscrollcommand=self.vscroll.set, xscrollcommand=self.hscroll.set)
+		self.innerFrame = Frame(self.canvas)
+		self.innerFrame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+		self.canvas.create_window((0,0), window=self.innerFrame, anchor="nw")
+		self.label = Label(self.innerFrame)
+		self.label.pack()
+
+		# Button bar
+		buttonFrame = Frame(self.master)
+		buttonFrame.grid(row=1, column=0, columnspan=4, sticky=E+W, padx=2, pady=2)
+		buttonFrame.grid_columnconfigure((0,1,2,3), weight=1)
+
+		self.setup = Button(buttonFrame, text="Setup", command=self.setupMovie)
+		self.setup.grid(row=0, column=0, padx=5, pady=2, sticky=E+W)
+
+		self.start = Button(buttonFrame, text="Play", command=self.playMovie)
+		self.start.grid(row=0, column=1, padx=5, pady=2, sticky=E+W)
+
+		self.pause = Button(buttonFrame, text="Pause", command=self.pauseMovie)
+		self.pause.grid(row=0, column=2, padx=5, pady=2, sticky=E+W)
+
+		self.teardown = Button(buttonFrame, text="Teardown", command=self.exitClient)
+		self.teardown.grid(row=0, column=3, padx=5, pady=2, sticky=E+W)
 	
 	def setupMovie(self):
 		"""Setup button handler."""
@@ -105,7 +114,8 @@ class Client:
 					# Discard the late packet	
 					if currFrameNbr > self.frameNbr: # Compare the current frame number with the last frame number received (Prevent out-of-order frames)
 						self.frameNbr = currFrameNbr
-						self.updateMovie(self.writeFrame(rtpPacket.getPayload())) # Write new frame
+						self.frameBuffer.extend(rtpPacket.getPayload())
+						self.tryAssembleFrame()
 			except:
 				# Stop listening upon requesting PAUSE or TEARDOWN
 				if self.playEvent.isSet(): # if the internal flag is true,  meaning pause
@@ -134,9 +144,28 @@ class Client:
 	
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
-		photo = ImageTk.PhotoImage(Image.open(imageFile)) # open the image file and convert it to a PhotoImage object (Tkinter compatible photo image)
-		self.label.configure(image = photo, height=288) # update the label with the new image (288 is the height of the image)
+		img = Image.open(imageFile)
+		photo = ImageTk.PhotoImage(img) # open the image file and convert it to a PhotoImage object (Tkinter compatible photo image)
+		self.label.configure(image = photo, width=img.width, height=img.height) # match widget size to actual frame
 		self.label.image = photo # keep a reference to avoid garbage collection (the image disappears)
+
+	def tryAssembleFrame(self):
+		"""Reassemble JPEG frame using SOI/EOI markers inside buffered payload."""
+		while True:
+			start = self.frameBuffer.find(SOI)
+			if start == -1:
+				# nothing looks like frame start; drop garbage
+				self.frameBuffer.clear()
+				break
+			end = self.frameBuffer.find(EOI, start + 2)
+			if end == -1:
+				# wait for the rest of the frame
+				if start > 0:
+					del self.frameBuffer[:start]
+				break
+			frame = self.frameBuffer[start:end + 2]
+			del self.frameBuffer[:end + 2]
+			self.updateMovie(self.writeFrame(frame))
 		
 	def connectToServer(self):
 		"""Connect to the Server. Start a new RTSP/TCP session."""
