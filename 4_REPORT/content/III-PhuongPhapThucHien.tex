@@ -160,6 +160,19 @@ Ethernet v2 & 1500 bytes & Hầu hết mạng LAN sử dụng Ethernet II nên M
 
 Mỗi fragment sẽ được đóng gói trong một gói RTP riêng biệt với đầy đủ header và payload. Client sẽ nhận các gói RTP, tái tạo lại các fragment và ghép chúng lại thành frame hoàn chỉnh bằng cách nhận diện các SOI, EOI trong payload (Marker Bit không được sử dụng do đã bị giới hạn giá trị bằng 0).
 
+\subsubsection{Hoàn thiện cơ chế chia nhỏ frame thành các fragment}
+
+
+
+\subsubsection{Hoàn thiện cơ chế bỏ qua các frame bị trễ để đảm bảo đồ mượt khi phát video}
+
+
+
+\subsubsection{Hoàn thiện tính năng hiện số frame mất và lưu lượng mạng trên giao diện}
+
+
+
+
 \subsubsection{Thử nghiệm}
 
 \textbf{Nhược điểm:} Dù đã gửi và chạy được nhưng với các video có độ phải cao hơn (1440p, 2160p,...) các frame tải chậm hơn tốc độ của video dẫn tới tình trạng mất frame và drop FPS nặng.
@@ -169,7 +182,12 @@ Các file trong phần này nằm trong thư mục \textbf{3\_Client\_Cache}. \\
 Đây là phiên bản nâng cấp của phần 2 và cũng là phiên bảng cuối cùng nhằm cải thiện trải nghiệm xem video HD bằng cách thêm bộ đệm (buffer) trên client. \\
 
 \subsubsection{Ý tưởng}
-Khắc phục nhược điểm của phần 2 bằng cách thêm bộ đệm (buffer) trên client để lưu trữ trước một số frame video nhất định trước khi phát. Khi người dùng nhấn Play, client sẽ bắt đầu nhận các gói RTP và lưu trữ các frame vào bộ đệm cho đến khi đạt ngưỡng đã định sẵn (ví dụ: 30 frame). Sau đó, client mới bắt đầu phát video từ bộ đệm trong khi tiếp tục nhận và lưu trữ các frame mới vào bộ đệm. Điều này giúp đảm bảo rằng có đủ frame để phát liên tục ngay cả khi tốc độ tải về chậm hơn tốc độ phát video. \\
+Khắc phục nhược điểm của phần 2 bằng cách thêm bộ đệm (buffer) trên client để lưu trữ trước một số frame video nhất định trước khi phát. Khi người dùng nhấn Play, client sẽ bắt đầu nhận các gói RTP và lưu trữ các frame vào bộ đệm cho đến khi đạt ngưỡng đã định sẵn (ví dụ: 30 frame). Sau đó, client mới bắt đầu phát video từ bộ đệm trong khi tiếp tục nhận và lưu trữ các frame mới vào bộ đệm. Điều này giúp đảm bảo rằng có đủ frame để phát liên tục ngay cả khi tốc độ tải về chậm hơn tốc độ phát video. 
+
+\subsubsection{Hoàn thiện cơ chế bộ đệm phía client}
+
+
+
 
 \subsubsection{Thử nghiệm}
 Thực hiện chạy server RTSP/RTP và client RTSP trên cùng máy tính với video mẫu qua câu lệnh:
