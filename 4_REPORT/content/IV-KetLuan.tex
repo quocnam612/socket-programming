@@ -1,11 +1,10 @@
 \section{Kết quả đạt được}
-
-Sau quá trình xây dựng, hoàn thiện và thử nghiệm hệ thống theo ba tiêu chí của bài tập lớn, nhóm đã thu được các kết quả như sau:
-
-\begin{itemize}
-    \item Hoàn thiện chức năng RTSP/RTP: Client có khả năng gửi các yêu cầu RTSP và nhận phản hồi đúng định dạng từ server. Phía server có thuật toán đóng gói RTP được hoàn thiện với đầy đủ các trường trong header. Hệ thống đã có thể truyền tải được các video MJPEG có độ phân giải thấp qua UDP với tốc độ ổn định và độ trễ thấp.
-    \item Hoàn thiện chức năng truyền tải video HD: Chia nhỏ mỗi frame MJPEG thành các fragment có kích thước phù hợp với MTU. Đảm bảo tốc độ truyền ổn định và tốc độ phát mượt. Hiện thị được số lượng frame mất và lưu lượng mạng. Hệ thống đã có thể phát được video HD với tốc độ ổn định.
-    \item Hoàn thiện chức năng bộ đệm phía client: Client luôn duy trì một số lượng frame được lưu trước (pre-buffer), đồng thời bổ sung các frame mới trong quá trình phát nhằm cải thiện khả năng xem lại và hạn chế giật hình khi video có độ phân giải lớn. Hệ thống đã có thể phát video có độ phân giải cao hơn như 1440p, 2160p mà không bị drop frame khi mạng không ổn định.
-\end{itemize}
-
+Sau quá trình xây dựng, hoàn thiện và thử nghiệm hệ thống theo ba tiêu chí của bài tập lớn, nhóm đã thu được các kết quả như sau.
+\subsection{Chức năng RTSP/RTP} 
+Client có khả năng gửi các yêu cầu RTSP và nhận phản hồi đúng định dạng từ server. Phía server có thuật toán đóng gói RTP được hoàn thiện với đầy đủ các trường trong header. Hệ thống đã có thể truyền tải được các video MJPEG có độ phân giải thấp qua UDP với tốc độ ổn định và độ trễ thấp.
+\subsection{Chức năng truyền tải video HD} 
+Chia nhỏ mỗi frame MJPEG thành các fragment có kích thước phù hợp với MTU. Đảm bảo tốc độ truyền ổn định và tốc độ phát mượt. Hiện thị được số lượng frame mất và lưu lượng mạng. Hệ thống đã có thể phát được video HD với tốc độ ổn định.
+\subsection{Chức năng bộ đệm phía client} 
+Client luôn duy trì một số lượng frame được lưu trước (pre-buffer), đồng thời bổ sung các frame mới trong quá trình phát nhằm cải thiện khả năng xem lại và hạn chế giật hình khi video có độ phân giải lớn. Hệ thống đã có thể phát video có độ phân giải cao hơn như 1440p, 2160p mà không bị drop frame khi mạng không ổn định.
+\section{Tổng kết}
 Hệ thống cuối cùng đáp ứng toàn bộ yêu cầu của bài lab, từ việc thực thi giao thức RTSP và đóng gói RTP, đến việc truyền tải video HD và hỗ trợ client cache. Các chức năng đều hoạt động như mong đợi, thể hiện sự phù hợp của thiết kế hệ thống cũng như cách tiếp cận từng bước của nhóm.

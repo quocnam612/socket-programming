@@ -59,7 +59,7 @@ Một phiên RTSP tiêu chuẩn gồm các trạng thái và lệnh sau:
 \end{itemize}
 Client và server giao tiếp bằng mô hình request–response, trong đó mỗi yêu cầu đều kèm theo CSeq (Command Sequence) để đánh số thứ tự và Session ID để xác định phiên làm việc.
 
-\subsection{Mjpeg - Motion JPEG}
+\subsection{MJPEG - Motion JPEG}
 MJPEG (Motion JPEG) là định dạng video được tạo ra bằng cách nối liên tiếp nhiều ảnh JPEG độc lập theo thời gian để tạo thành chuỗi chuyển động. \cite{mjpeg1} \\
 Cấu trúc của một frame MJPEG bao gồm:
 \begin{itemize}
@@ -67,3 +67,34 @@ Cấu trúc của một frame MJPEG bao gồm:
     \item Trước mỗi frame có một 5-byte header mô tả độ dài frame.
     \item JPEG frame bắt đầu bằng \texttt{0xFF 0xD8} (SOI) và kết thúc bằng \texttt{0xFF 0xD9} (EOI).
 \end{itemize}
+
+\subsection{MTU - Maximum Transmission Unit}
+MTU (Maximum Transmission Unit) là kích thước tối đa của một đơn vị dữ liệu có thể được truyền đi trong một frame hoặc một gói tin trên một phương tiện mạng (network interface) mà không cần bị phân mảnh (fragmentation). \cite{mtu1}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|p{4cm}|p{5cm}|p{7cm}|}
+\hline
+\textbf{Các phương tiện truyền tải qua IP} & \textbf{MTU (bytes)} & \textbf{Notes} \\ \hline
+Internet IPv4 path MTU & Tối thiểu 68 bytes, tối đa 64 KiB & MTU thực tế phụ thuộc đường truyền; nếu router giảm MTU sẽ xảy ra IP fragmentation. \\ \hline
+Internet IPv6 path MTU & Tối thiểu 1280 bytes, tối đa 64 KiB & Yêu cầu MTU tối thiểu 1280 bytes; hỗ trợ gói jumbo cho payload lớn. \\ \hline
+X.25 & 576 bytes khi gửi hoặc 1600 bytes khi nhận & Chuẩn X.25 quy định hai ngưỡng MTU khác nhau cho chiều gửi và nhận. \\ \hline
+Ethernet v2 & 1500 bytes & Hầu hết mạng LAN sử dụng Ethernet II nên MTU mặc định luôn là 1500 bytes. \\ \hline
+... & ... & ... \\ \hline
+\end{tabular}
+\caption{Một số MTU cho các phương tiện truyền tải phổ biến}
+\end{table}
+
+Ngoài ra, WiFi (802.11) cũng dùng MTU 1500 cho IP payload và mọi router WiFi đều mặc định sử dụng MTU = 1500 để tương thích Internet. \cite{mtu2}
+
+\subsection{UDP - User datagram protocol và TCP - Transmission Control Protocol}
+
+TCP là giao thức truyền vận đáng tin cậy (reliable), hướng kết nối (connection-oriented), đảm bảo dữ liệu được gửi theo đúng thứ tự và không bị mất.
+UDP là giao thức truyền vận không kết nối (connectionless), không đảm bảo độ tin cậy (unreliable), không kiểm soát luồng dữ liệu và không đảm bảo thứ tự gói tin. \cite{udptcp1}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{img/compare.png}
+    \caption{So sánh TCP và UDP \cite{udptcp2}}
+    \label{fig:placeholder}
+\end{figure}

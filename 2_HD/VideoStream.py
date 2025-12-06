@@ -7,19 +7,49 @@ class VideoStream:
 			raise IOError # throw Input/Output error
 		self.frameNum = 0
 		
+		self.lengthPrefixed = self._detectLengthPrefix()
+		if not self.lengthPrefixed:
+			self.rawFrames = self._loadRawFrames()
+			self.totalFrames = len(self.rawFrames)
+		else:
+			self.rawFrames = None
+			self.totalFrames = None
+
 	def nextFrame(self):
 		"""Get next frame."""
-		data = self.file.read(5) # Get the framelength from the first 5 bits from where it is currently reading (if it's the first time, it reads from the start of the file)
-		if data: 
-			framelength = int(data)
-							
-			# Read the current frame
-			data = self.file.read(framelength) # CONTINUE to read the next <framelength> bits which is the frame data (in bits)
-			self.frameNum += 1
-		return data
-		
+		if self.lengthPrefixed:
+			data = self.file.read(5)
+			if data:
+				framelength = int(data)
+				data = self.file.read(framelength)
+				self.frameNum += 1
+			return data
+		else:
+			if self.rawFrames and self.frameNum < len(self.rawFrames):
+				frame = self.rawFrames[self.frameNum]
+				self.frameNum += 1
+				return frame
+			return b''
+
 	def frameNbr(self):
 		"""Get frame number."""
 		return self.frameNum
-	
+
+	def _detectLengthPrefix(self):
+		pos = self.file.tell()
+		peek = self.file.read(5)
+		self.file.seek(pos)
+		return peek.isdigit()
+
+	def _loadRawFrames(self):
+		content = self.file.read()
+		frames = []
+		start = content.find(b'\xff\xd8')
+		while start != -1:
+			end = content.find(b'\xff\xd9', start + 2)
+			if end == -1:
+				break
+			frames.append(content[start:end + 2])
+			start = content.find(b'\xff\xd8', end + 2)
+		return frames
 	

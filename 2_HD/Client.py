@@ -35,42 +35,41 @@ class Client:
 		self.requestSent = -1 # Last request sent to the server (0 : SETUP, 1 : PLAY, 2 : PAUSE, 3 : TEARDOWN)
 		self.teardownAcked = 0 # Flag to indicate if teardown is acknowledged
 		self.connectToServer()
-		self.frameNbr = 0
+		self.frameNbr = -1
+
+		self.packetNbr = 0
+		self.frameLoss = 0
 		self.frameBuffer = bytearray() # buffer to hold the received segments until a full frame is assembled
+		self.displayWidth = 960
+		self.displayHeight = 540
+		self.lastFrame = None
 		
 	def createWidgets(self):
 		"""Build GUI."""
 		self.master.grid_rowconfigure(0, weight=1)
-		self.master.grid_columnconfigure(0, weight=1)
+		for col in range(4):
+			self.master.grid_columnconfigure(col, weight=1)
 
-		# Video canvas with scrollbars
-		self.canvas = Canvas(self.master, highlightthickness=0)
-		self.canvas.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
-		self.vscroll = Scrollbar(self.master, orient=VERTICAL, command=self.canvas.yview)
-		self.vscroll.grid(row=0, column=4, sticky=N+S)
-		self.hscroll = Scrollbar(self.master, orient=HORIZONTAL, command=self.canvas.xview)
-		self.hscroll.grid(row=2, column=0, columnspan=4, sticky=E+W, padx=5)
-		self.canvas.configure(yscrollcommand=self.vscroll.set, xscrollcommand=self.hscroll.set)
-		self.innerFrame = Frame(self.canvas)
-		self.innerFrame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-		self.canvas.create_window((0,0), window=self.innerFrame, anchor="nw")
-		self.label = Label(self.innerFrame)
-		self.label.pack()
+		self.videoFrame = Frame(self.master, bg="black")
+		self.videoFrame.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
+		self.videoFrame.bind("<Configure>", self.onVideoResize)
+		self.label = Label(self.videoFrame, bg="black")
+		self.label.pack(fill=BOTH, expand=True)
 
-		# Button bar
 		buttonFrame = Frame(self.master)
 		buttonFrame.grid(row=1, column=0, columnspan=4, sticky=E+W, padx=2, pady=2)
-		buttonFrame.grid_columnconfigure((0,1,2,3), weight=1)
+		for col in range(4):
+			buttonFrame.grid_columnconfigure(col, weight=1)
 
 		self.setup = Button(buttonFrame, text="Setup", command=self.setupMovie)
 		self.setup.grid(row=0, column=0, padx=5, pady=2, sticky=E+W)
-
+		
 		self.start = Button(buttonFrame, text="Play", command=self.playMovie)
 		self.start.grid(row=0, column=1, padx=5, pady=2, sticky=E+W)
-
+		
 		self.pause = Button(buttonFrame, text="Pause", command=self.pauseMovie)
 		self.pause.grid(row=0, column=2, padx=5, pady=2, sticky=E+W)
-
+		
 		self.teardown = Button(buttonFrame, text="Teardown", command=self.exitClient)
 		self.teardown.grid(row=0, column=3, padx=5, pady=2, sticky=E+W)
 	
@@ -108,14 +107,16 @@ class Client:
 					rtpPacket = RtpPacket()
 					rtpPacket.decode(data)
 					
-					currFrameNbr = rtpPacket.seqNum()
-					print("Current Seq Num: " + str(currFrameNbr))
+					frameId = rtpPacket.timestamp()
+					print("Current Frame Num: " + str(frameId))
 
-					# Discard the late packet	
-					if currFrameNbr > self.frameNbr: # Compare the current frame number with the last frame number received (Prevent out-of-order frames)
-						self.frameNbr = currFrameNbr
-						self.frameBuffer.extend(rtpPacket.getPayload())
-						self.tryAssembleFrame()
+					if frameId < self.frameNbr:
+						continue
+					if frameId > self.frameNbr:
+						self.frameNbr = frameId
+						self.frameBuffer.clear()
+					self.frameBuffer.extend(rtpPacket.getPayload())
+					self.tryAssembleFrame()
 			except:
 				# Stop listening upon requesting PAUSE or TEARDOWN
 				if self.playEvent.isSet(): # if the internal flag is true,  meaning pause
@@ -145,9 +146,31 @@ class Client:
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
 		img = Image.open(imageFile)
-		photo = ImageTk.PhotoImage(img) # open the image file and convert it to a PhotoImage object (Tkinter compatible photo image)
-		self.label.configure(image = photo, width=img.width, height=img.height) # match widget size to actual frame
-		self.label.image = photo # keep a reference to avoid garbage collection (the image disappears)
+		self.lastFrame = img.copy()
+		self.renderFrame()
+
+	def renderFrame(self):
+		"""Render the cached frame scaled to fit the current window."""
+		if self.lastFrame is None:
+			return
+		frame_w = self.videoFrame.winfo_width() or self.displayWidth
+		frame_h = self.videoFrame.winfo_height() or self.displayHeight
+		scale = min(frame_w / self.lastFrame.width, frame_h / self.lastFrame.height)
+		if scale <= 0:
+			scale = 1
+		new_size = (
+			max(1, int(self.lastFrame.width * scale)),
+			max(1, int(self.lastFrame.height * scale)),
+		)
+		img = self.lastFrame if new_size == (self.lastFrame.width, self.lastFrame.height) else self.lastFrame.resize(new_size, Image.LANCZOS)
+		photo = ImageTk.PhotoImage(img)
+		self.label.configure(image=photo)
+		self.label.image = photo
+
+	def onVideoResize(self, event):
+		self.displayWidth = max(1, event.width)
+		self.displayHeight = max(1, event.height)
+		self.renderFrame()
 
 	def tryAssembleFrame(self):
 		"""Reassemble JPEG frame using SOI/EOI markers inside buffered payload."""

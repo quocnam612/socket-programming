@@ -3,6 +3,8 @@ import sys, traceback, threading, socket
 
 from VideoStream import VideoStream
 from RtpPacket import RtpPacket
+# 20468 max
+MAX_PAYLOAD = 1500 # bytes per RTP fragment to avoid exceeding MTU
 
 class ServerWorker:
 	SETUP = 'SETUP'
@@ -85,6 +87,7 @@ class ServerWorker:
 				
 				# Create a new socket for RTP/UDP
 				self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # socket(IPV4, UDP), UDP for RTP
+				self.seqNum = 0
 				
 				self.replyRtsp(self.OK_200, seq[1])
 				
@@ -125,18 +128,26 @@ class ServerWorker:
 				
 			data = self.clientInfo['videoStream'].nextFrame()
 			if data: 
-				frameNumber = self.clientInfo['videoStream'].frameNbr()
 				try:
+					frameNumber = self.clientInfo['videoStream'].frameNbr()
 					address = self.clientInfo['rtspSocket'][1][0] # "rtspSocket": (socket object, client address(clientAddr : (IP, port)))
 					port = int(self.clientInfo['rtpPort'])
-					self.clientInfo['rtpSocket'].sendto(self.makeRtp(data, frameNumber), (address, port)) # sendto(data, (IP, port)) over UDP
+					for start in range(0, len(data), MAX_PAYLOAD):
+						if self.clientInfo['event'].isSet():
+							break
+						fragment = data[start:start + MAX_PAYLOAD]
+						self.seqNum += 1
+						packet = self.makeRtp(fragment, self.seqNum, frameNumber)
+						self.clientInfo['rtpSocket'].sendto(packet, (address, port)) # sendto(data, (IP, port)) over UDP
 				except:
 					print("Connection Error")
 					#print('-'*60)
 					#traceback.print_exc(file=sys.stdout)
 					#print('-'*60)
+			# else:
+			# 	break
 
-	def makeRtp(self, payload, frameNbr):
+	def makeRtp(self, payload, seqnum, frameNbr):
 		"""RTP-packetize the video data."""
 		version = 2
 		padding = 0
@@ -144,12 +155,11 @@ class ServerWorker:
 		cc = 0
 		marker = 0
 		pt = 26 # MJPEG type
-		seqnum = frameNbr
 		ssrc = 0 
 		
 		rtpPacket = RtpPacket()
 		
-		rtpPacket.encode(version, padding, extension, cc, seqnum, marker, pt, ssrc, payload)
+		rtpPacket.encode(version, padding, extension, cc, seqnum, marker, pt, ssrc, payload, timestamp=frameNbr)
 		
 		return rtpPacket.getPacket()
 		
