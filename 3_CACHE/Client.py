@@ -4,6 +4,7 @@ from PIL import Image, ImageTk, ImageFile
 from PIL import UnidentifiedImageError
 import io
 import socket, threading, os, time
+import math
 from collections import deque
 from RtpPacket import RtpPacket
 
@@ -11,7 +12,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
-TARGET_FRAME_INTERVAL = 1 / 30  # target ~30fps playback
+TARGET_FRAME_INTERVAL = 1 / 20  # target ~20fps playback
 LEGACY_DETECT_THRESHOLD = 2000  # packets without marker before fallback
 
 
@@ -42,6 +43,8 @@ class Client:
         self.teardownAcked = 0  # Flag to indicate if teardown is acknowledged
         self.connectToServer()
         self.frameNbr = 0
+        self.prevFrameId = -1
+        self.frameBase = None
         self.frameFragments = {}
         self.frameQueue = deque()
         self.queueLock = threading.Lock()
@@ -54,6 +57,8 @@ class Client:
         self.packetLoss = 0
         self.bytesReceived = 0
         self.framesDisplayed = 0
+        self.frameLoss = 0
+        self.packetCount = 0
         self.startTime = None
         self.cacheName = ""
         self.legacyMode = False
@@ -65,60 +70,53 @@ class Client:
         self.frameCount = 0
         self.totalFrames = 0
         self.frameBuffer = []
-        self.MIN_BUFFER_SIZE = 50
+        self.lastFrame = None
+        self.frameTimes = []
+        self.displayWidth = 640
+        self.displayHeight = 360
+        self.frameStep = None
+        self.MIN_BUFFER_SIZE = 20
         self.MAX_BUFFER_SIZE = 100 # kích thước tối đa cho buffer
 
 
     def createWidgets(self):
         """Build GUI."""
         self.master.grid_rowconfigure(0, weight=1)
-        self.master.grid_columnconfigure(0, weight=1)
-        self.master.grid_columnconfigure(1, weight=1)
-        self.master.grid_columnconfigure(2, weight=1)
-        self.master.grid_columnconfigure(3, weight=1)
+        for col in range(4):
+            self.master.grid_columnconfigure(col, weight=1)
+
+        self.videoFrame = Frame(self.master, bg="black")
+        self.videoFrame.grid(row=0, column=0, columnspan=4, sticky=W + E + N + S, padx=5, pady=5)
+        self.videoFrame.bind("<Configure>", self.onWindowResize)
+        self.label = Label(self.videoFrame, bg="black")
+        self.label.pack(fill=BOTH, expand=True)
+
+        buttonFrame = Frame(self.master)
+        buttonFrame.grid(row=1, column=0, columnspan=4, sticky=E + W, padx=2, pady=2)
+        for col in range(4):
+            buttonFrame.grid_columnconfigure(col, weight=1)
 
         # Create Setup button
-        self.setup = Button(self.master, width=20, padx=3, pady=3)
-        self.setup["text"] = "Setup"
-        self.setup["command"] = self.setupMovie
-        self.setup.grid(row=1, column=0, padx=2, pady=2)
+        self.setup = Button(buttonFrame, text="Setup", command=self.setupMovie)
+        self.setup.grid(row=0, column=0, padx=5, pady=2, sticky=E + W)
 
         # Create Play button
-        self.start = Button(self.master, width=20, padx=3, pady=3)
-        self.start["text"] = "Play"
-        self.start["command"] = self.playMovie
-        self.start.grid(row=1, column=1, padx=2, pady=2)
+        self.start = Button(buttonFrame, text="Play", command=self.playMovie)
+        self.start.grid(row=0, column=1, padx=5, pady=2, sticky=E + W)
 
         # Create Pause button
-        self.pause = Button(self.master, width=20, padx=3, pady=3)
-        self.pause["text"] = "Pause"
-        self.pause["command"] = self.pauseMovie
-        self.pause.grid(row=1, column=2, padx=2, pady=2)
+        self.pause = Button(buttonFrame, text="Pause", command=self.pauseMovie)
+        self.pause.grid(row=0, column=2, padx=5, pady=2, sticky=E + W)
 
         # Create Teardown button
-        self.teardown = Button(self.master, width=20, padx=3, pady=3)
-        self.teardown["text"] = "Teardown"
-        self.teardown["command"] = self.exitClient
-        self.teardown.grid(row=1, column=3, padx=2, pady=2)
-
-        # Create a scrollable canvas to display the movie
-        self.canvas = Canvas(self.master, highlightthickness=0)
-        self.canvas.grid(row=0, column=0, columnspan=4, sticky=W + E + N + S, padx=5, pady=5)
-        self.vscroll = Scrollbar(self.master, orient=VERTICAL, command=self.canvas.yview)
-        self.vscroll.grid(row=0, column=4, sticky=N + S)
-        self.hscroll = Scrollbar(self.master, orient=HORIZONTAL, command=self.canvas.xview)
-        self.hscroll.grid(row=3, column=0, columnspan=4, sticky=E + W, padx=5)
-        self.canvas.configure(yscrollcommand=self.vscroll.set, xscrollcommand=self.hscroll.set)
-        self.canvasFrame = Frame(self.canvas)
-        self.canvasFrame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.imageWindow = self.canvas.create_window((0, 0), window=self.canvasFrame, anchor="nw")
-        self.label = Label(self.canvasFrame)
-        self.label.pack()
+        self.teardown = Button(buttonFrame, text="Teardown", command=self.exitClient)
+        self.teardown.grid(row=0, column=3, padx=5, pady=2, sticky=E + W)
 
         self.statsVar = StringVar()
-        self.statsVar.set("Frames: 0 | Lost: 0 | Throughput: 0 kbps")
+        self.statsVar.set("Frame: 0 | Packets: 0 | Loss(frames): 0 | FPS: 0.0 | Net: 0 kbps")
         self.statsLabel = Label(self.master, textvariable=self.statsVar, anchor=W)
-        self.statsLabel.grid(row=2, column=0, columnspan=4, sticky=W, padx=5)
+        self.statsLabel.grid(row=2, column=0, columnspan=4, sticky=E + W, padx=5, pady=(0, 5))
+
 
     def setupMovie(self):
         """Setup button handler."""
@@ -148,6 +146,13 @@ class Client:
             self.bytesReceived = 0
             self.framesDisplayed = 0
             self.lastSeq = 0
+            self.packetCount = 0
+            self.frameLoss = 0
+            self.prevFrameId = -1
+            self.frameBase = None
+            self.frameStep = None
+            self.frameNbr = 0
+            self.frameTimes.clear()
             self.startTime = time.time()
             self.playEvent = threading.Event()
             self.playEvent.clear()
@@ -200,19 +205,41 @@ class Client:
         try:
             image = Image.open(io.BytesIO(frameData))
             image.load()  # force full read
-            photo = ImageTk.PhotoImage(image)
         except UnidentifiedImageError:
             print("Skipping invalid frame")
             return
 
-        self.label.configure(image=photo)
-        self.label.image = photo
-        self.canvas.itemconfigure(self.imageWindow, width=photo.width(), height=photo.height())
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
+        self.lastFrame = image.copy()
+        self.frameTimes.append(time.time())
+        self.renderFrame()
         self.lastFrameTime = time.time()
         self.frameCount += 1
         self.drawProgressBar()
+
+    def renderFrame(self):
+        if not self.lastFrame:
+            return
+        self.displayWidth = max(1, self.displayWidth)
+        self.displayHeight = max(1, self.displayHeight)
+        scale = min(
+            self.displayWidth / max(1, self.lastFrame.width),
+            self.displayHeight / max(1, self.lastFrame.height),
+        )
+        if scale <= 0:
+            scale = 1
+        new_size = (
+            max(1, int(self.lastFrame.width * scale)),
+            max(1, int(self.lastFrame.height * scale)),
+        )
+        img = self.lastFrame if new_size == (self.lastFrame.width, self.lastFrame.height) else self.lastFrame.resize(new_size, Image.LANCZOS)
+        photo = ImageTk.PhotoImage(img)
+        self.label.configure(image=photo)
+        self.label.image = photo
+
+    def onWindowResize(self, event):
+        self.displayWidth = max(1, event.width)
+        self.displayHeight = max(1, event.height)
+        self.renderFrame()
 
     def drawProgressBar(self):
         W, H = 400, 10
@@ -440,6 +467,7 @@ class Client:
 
     def handleRtpPacket(self, rtpPacket, packetSize):
         currSeqNum = rtpPacket.seqNum()
+        self.packetCount += 1
 
         # Track packet loss
         if self.lastSeq and currSeqNum > self.lastSeq + 1:
@@ -482,7 +510,7 @@ class Client:
         with self.queueLock:
             self.frameQueue.append((frameId, frameData))
             self.frameBuffer.append(frameId)
-            if len(self.frameQueue) > 50:
+            if len(self.frameQueue) > self.MIN_BUFFER_SIZE:
                 self.frameQueue.popleft()
             if len(self.frameBuffer) > self.MAX_BUFFER_SIZE:
                 self.frameBuffer.pop(0)
@@ -499,24 +527,39 @@ class Client:
             frame = None
             with self.queueLock:
                 if self.frameQueue:
+                    now = time.time()
+                    if now > nextFrameDeadline and len(self.frameQueue) > 1:
+                        behind = now - nextFrameDeadline
+                        dropCount = min(
+                            len(self.frameQueue) - 1,
+                            int(behind / TARGET_FRAME_INTERVAL),
+                        )
+                        for _ in range(dropCount):
+                            self.frameQueue.popleft()
+                            self.playedFrames += 1
+                        nextFrameDeadline += dropCount * TARGET_FRAME_INTERVAL
                     frame = self.frameQueue.popleft()
 
             if frame:
                 frameId, frameData = frame
-                self.frameNbr = frameId
+                normId = self.normalizeFrameId(frameId)
+                if self.prevFrameId >= 0 and normId > self.prevFrameId + 1:
+                    self.frameLoss += normId - self.prevFrameId - 1
+                self.prevFrameId = normId
+                self.frameNbr = normId
                 self.framesDisplayed += 1
                 self.playedFrames += 1
                 self.updateMovie(frameData)
                 self.updateStatsLabel()
-                nextFrameDeadline = max(time.time(), nextFrameDeadline)
+                nextFrameDeadline += TARGET_FRAME_INTERVAL
                 sleepTime = max(0, nextFrameDeadline - time.time())
             else:
                 self.bufferEvent.wait(TARGET_FRAME_INTERVAL)
                 self.bufferEvent.clear()
                 sleepTime = TARGET_FRAME_INTERVAL
+                nextFrameDeadline = time.time() + TARGET_FRAME_INTERVAL
 
             time.sleep(sleepTime)
-            nextFrameDeadline = time.time() + TARGET_FRAME_INTERVAL
 
 
     def stopPlaybackThreads(self):
@@ -535,10 +578,28 @@ class Client:
             pass
 
     def updateStatsLabel(self):
-        elapsed = max(time.time() - self.startTime, 0.001) if self.startTime else 0.001
+        now = time.time()
+        elapsed = max(now - self.startTime, 0.001) if self.startTime else 0.001
+        while self.frameTimes and now - self.frameTimes[0] > 1.0:
+            self.frameTimes.pop(0)
+        fps = len(self.frameTimes)
         kbps = (self.bytesReceived * 8) / 1000 / elapsed
-        text = f"Frames: {self.framesDisplayed} | Lost: {self.packetLoss} | Throughput: {kbps:.1f} kbps"
+        text = f"Frame: {self.frameNbr} | Packets: {self.packetCount} | Loss(frames): {self.frameLoss} | FPS: {fps:.1f} | Net: {kbps:.1f} kbps"
         self.statsVar.set(text)
+
+    def normalizeFrameId(self, frameId):
+        if self.frameBase is None:
+            self.frameBase = frameId
+            return 1
+        diff = frameId - self.frameBase
+        if diff <= 0:
+            return 1
+        if self.frameStep is None and diff > 0:
+            self.frameStep = diff
+        elif self.frameStep:
+            self.frameStep = math.gcd(self.frameStep, diff) or self.frameStep
+        step = self.frameStep or 1
+        return diff // step + 1
 
     def handler(self):
         """Handler on explicitly closing the GUI window."""

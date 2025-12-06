@@ -1,6 +1,6 @@
+# DO NOT MODIFY
 .vscode/
-
 cache*.png
 cache*.jpg
 cache*.jpeg
---pycache__/
+__pycache__/

@@ -35,11 +35,12 @@ class Client:
 		self.requestSent = -1 # Last request sent to the server (0 : SETUP, 1 : PLAY, 2 : PAUSE, 3 : TEARDOWN)
 		self.teardownAcked = 0 # Flag to indicate if teardown is acknowledged
 		self.connectToServer()
-		self.frameNbr = -1
+		self.frameNbr = -1 # last frame successfully rendered
+		self.pendingFrameId = -1 # highest frame timestamp observed but not necessarily decoded
 
 		self.lastFrame = None # last frame received from the server
 		self.frameBuffer = bytearray() # buffer to hold the received segments until a full frame is assembled
-		self.frameLoss = 0 # total lost frames
+		self.frameLoss = 0 # total lost frames detected
 		self.packetCount = 0 # total received packets
 		self.frameCount = 0 # total received frames
 		self.bytesReceived = 0 # total received bytes
@@ -79,7 +80,7 @@ class Client:
 
 		# Stats label
 		self.statsVar = StringVar()
-		self.statsVar.set("Frame: 0 | Packets: 0 | Loss: 0 | FPS: 0.0 | Net: 0 kbps")
+		self.statsVar.set("Frame: 0 | Packets: 0 | Loss(frames): 0 | FPS: 0.0 | Net: 0 kbps")
 		self.statsLabel = Label(self.master, textvariable=self.statsVar, anchor=W)
 		self.statsLabel.grid(row=2, column=0, columnspan=4, sticky=E+W, padx=5, pady=(0,5))
 	
@@ -120,21 +121,20 @@ class Client:
 					self.bytesReceived += len(data)
 					rtpPacket = RtpPacket()
 					rtpPacket.decode(data)
-					
 					frameId = rtpPacket.timestamp()
 					print("Current Frame Num: " + str(frameId))
-
-					if frameId < self.frameNbr:
+					if self.pendingFrameId != -1 and frameId < self.pendingFrameId:
 						continue
-					if frameId > self.frameNbr:
-						if self.frameNbr == -1:
-							self.nextExpectedFrame = frameId
-						elif frameId > self.nextExpectedFrame:
-							self.frameLoss += frameId - self.nextExpectedFrame
-						self.frameNbr = frameId
-						self.nextExpectedFrame = frameId + 1
+					if self.pendingFrameId != -1 and frameId == self.pendingFrameId and self.frameNbr == self.pendingFrameId:
+						continue
+					if frameId > self.pendingFrameId:
+						if self.pendingFrameId >= 0 and self.frameNbr < self.pendingFrameId:
+							self.frameLoss += 1
+						if self.pendingFrameId >= 0 and frameId - self.pendingFrameId > 1:
+							self.frameLoss += frameId - self.pendingFrameId - 1
+						self.pendingFrameId = frameId
 						self.frameBuffer.clear()
-					self.frameBuffer.extend(rtpPacket.getPayload()) # append the payload to the frame buffer
+					self.frameBuffer.extend(rtpPacket.getPayload())
 					self.tryAssembleFrame()
 			except:
 				# Stop listening upon requesting PAUSE or TEARDOWN
@@ -390,6 +390,7 @@ class Client:
 			frame = self.frameBuffer[start:end + 2]
 			del self.frameBuffer[:end + 2]
 			self.updateMovie(self.writeFrame(frame))
+			self.frameNbr = self.pendingFrameId
 		
 	def updateStats(self):
 		if self.startTime is None:
@@ -401,5 +402,5 @@ class Client:
 		fps = len(self.frameTimes)
 		throughput = (self.bytesReceived * 8 / 1000) / elapsed
 		self.statsVar.set(
-			f"Frame: {self.frameNbr} | Packets: {self.packetCount} | Loss: {self.frameLoss} | FPS: {fps:.1f} | Net: {throughput:.1f} kbps"
+			f"Frame: {self.frameNbr} | Packets: {self.packetCount} | Loss(frames): {self.frameLoss} | FPS: {fps:.1f} | Net: {throughput:.1f} kbps"
 		)
