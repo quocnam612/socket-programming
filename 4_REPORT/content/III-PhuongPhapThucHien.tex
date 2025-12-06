@@ -130,15 +130,15 @@ python 1_RTSP_RTP/ClientLauncher.py 127.0.0.1 8089 8090 video/movie288.Mjpeg \en
 Output thu được khi chọn các nút (Setup -> Play -> Pause) trên giao diện client:
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\linewidth]{img/3-demoOutput.png}
+    \includegraphics[width=0.7\linewidth]{img/1-demoOutput.png}
     \caption{Output RTSP/GUI client tiêu chí 1}
 \end{figure}
 Có thể thấy client đã gửi đúng các request RTSP và chạy được video qua giao thức RTP. \\
-\textbf{Nhược điểm:} Với video có độ phân giải cao (HD trở lên) khi 1 frame vượt quá kích thước gói UDP sẽ bị tràng byte qua các gói khác, dẫn đến việc giải mã sai các frame tiếp theo và báo lỗi.
+\textbf{Nhược điểm:} Với video có độ phân giải cao (HD trở lên) khi 1 frame vượt quá kích thước gói UDP sẽ bị tràn byte qua các gói khác, dẫn đến việc giải mã sai các frame tiếp theo và báo lỗi.
 
 \subsection{Bổ sung HD video streaming (3đ)}
 Các file trong phần này nằm trong thư mục \textbf{2\_HD\_Video\_Streaming}. \\
-Đây là phiên bản nâng cấp của phần 1 nhằm hỗ trợ streaming video có độ phân giải cao (HD - 720p, Full HD - 1080p). \\
+Đây là phiên bản nâng cấp của phần 1 nhằm hỗ trợ streaming video có độ phân giải cao (HD - 720p, Full HD - 1080p).
 
 \subsubsection{Ý tưởng}
 Khắc phục nhược điểm của phần 1 bằng cách chia nhỏ frame video thành các mảnh (fragment) có kích thước phù hợp với gói UDP dựa trên MTU (1500 bytes).
@@ -182,7 +182,6 @@ Sau khi nhận được một gói RTP, ta sẽ trích xuất payload và lưu v
 Trong quá trình nhận gói RTP, do tính chất không kết nối của UDP và việc chia nhỏ frame thành các fragment, có thể xảy ra tình trạng mất gói hoặc trễ gói. Điều này dẫn đến việc client không thể tái tạo đúng frame hoàn chỉnh từ các fragment nhận được. Để khắc phục vấn đề này và đảm bảo tính mượt mà khi phát video, ta sẽ bổ sung cơ chế bỏ qua các frame bị trễ dựa trên số thứ tự frame trong phương thức \texttt{listenRtp.py} trong \textbf{Client.py}:
 
 \lstinputlisting[language=Python]{code/listenRtp.py}
-ameNbr
 Hàm sẽ kiểm tra các điều kiện sau:
 \begin{itemize}
     \item Nếu số thứ tự frame nhận được (\texttt{frameId}) $<$ số thứ tự frame đang chờ xử lý (\texttt{frameNbr}) $\rightarrow$  frame này đã bị trễ và không còn cần thiết $\Rightarrow$  bỏ qua frame này.
@@ -280,12 +279,11 @@ Output thu được trên giao diện client:
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\linewidth]{img/2-demoOutput.png}
+    \includegraphics[width=0.7\linewidth]{img/3-demoOutput.png}
     \caption{Output RTSP/GUI client tiêu chí 3}
 \end{figure}
 
 Có thể thấy video 1440p đã chạy mượt mà ở 20 FPS mà không bị giật hình hay drop frame, ngay cả khi mạng có độ trễ nhẹ. Thanh play bar và buffer bar  cũng phản hồi đúng với thời lượng video.\\
-
 Lợi ích của cơ chế Client-Side caching:
 \begin{itemize}
     \item Video ổn định hơn trong khi mạng chưa kịp ổn định
